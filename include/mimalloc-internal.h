@@ -309,7 +309,10 @@ mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing hea
 #endif
 #endif
 
-#if defined(MI_TLS_SLOT)
+#ifdef DMalterlib
+mi_heap_t* _mi_heap_default_get();
+#define _mi_heap_default _mi_heap_default_get()
+#elif defined(MI_TLS_SLOT)
 static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept;   // forward declaration
 #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
 #include <pthread.h>
@@ -331,7 +334,9 @@ extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate 
 #endif
 
 static inline mi_heap_t* mi_get_default_heap(void) {
-#if defined(MI_TLS_SLOT)
+#if defined(DMalterlib)
+  return _mi_heap_default_get();
+#elif defined(MI_TLS_SLOT)
   mi_heap_t* heap = (mi_heap_t*)mi_tls_slot(MI_TLS_SLOT);
   return (mi_unlikely(heap == NULL) ? (mi_heap_t*)&_mi_heap_empty : heap);
 #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
@@ -740,7 +745,11 @@ static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
 #else
 // otherwise use standard C
 static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
-  return (uintptr_t)&_mi_heap_default;
+  #ifdef DMalterlib
+    return NMib::NSys::fg_Thread_GetCurrentUID();
+  #else
+    return (uintptr_t)&_mi_heap_default;
+  #endif
 }
 #endif
 
