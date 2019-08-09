@@ -377,7 +377,10 @@ mi_heap_t*  _mi_heap_main_get(void);    // statically allocated main backing hea
 #endif
 #endif
 
-#if defined(MI_TLS_SLOT)
+#ifdef DMalterlib
+mi_heap_t* _mi_heap_default_get();
+#define _mi_heap_default _mi_heap_default_get()
+#elif defined(MI_TLS_SLOT)
 static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept;   // forward declaration
 #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
 static inline mi_heap_t** mi_tls_pthread_heap_slot(void) {
@@ -398,10 +401,14 @@ extern pthread_key_t _mi_heap_default_key;
 // Do not use this directly but use through `mi_heap_get_default()` (or the unchecked `mi_get_default_heap`).
 // This thread local variable is only used when neither MI_TLS_SLOT, MI_TLS_PTHREAD, or MI_TLS_PTHREAD_SLOT_OFS are defined.
 // However, on the Apple M1 we do use the address of this variable as the unique thread-id (issue #356).
+#ifndef DMalterlib
 extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
+#endif
 
 static inline mi_heap_t* mi_get_default_heap(void) {
-#if defined(MI_TLS_SLOT)
+#if defined(DMalterlib)
+  return _mi_heap_default_get();
+#elif defined(MI_TLS_SLOT)
   mi_heap_t* heap = (mi_heap_t*)mi_tls_slot(MI_TLS_SLOT);
   if mi_unlikely(heap == NULL) {
     #ifdef __GNUC__
@@ -930,7 +937,11 @@ static inline mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
 
 // otherwise use portable C, taking the address of a thread local variable (this is still very fast on most platforms).
 static inline mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
-  return (uintptr_t)&_mi_heap_default;
+  #ifdef DMalterlib
+    return NMib::NSys::fg_Thread_GetCurrentUID();
+  #else
+    return (uintptr_t)&_mi_heap_default;
+  #endif
 }
 
 #endif
