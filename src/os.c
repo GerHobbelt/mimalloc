@@ -165,7 +165,9 @@ static bool mi_os_mem_free(void* addr, size_t size, mi_stats_t* stats)
   _mi_stat_decrease(&stats->committed, size); // TODO: what if never committed?
   _mi_stat_decrease(&stats->reserved, size);
   if (err) {
+#ifdef _MSC_VER
 #pragma warning(suppress:4996)
+#endif
     _mi_warning_message("munmap failed: %s, addr 0x%8li, size %lu\n", strerror(errno), (size_t)addr, size);
     return false;
   }

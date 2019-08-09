@@ -17,7 +17,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #if (MI_DEBUG>0)
 #define mi_trace_message(...)  _mi_trace_message(__VA_ARGS__)
 #else
-#define mi_trace_message(...)  
+#define mi_trace_message(...)
 #endif
 
 
@@ -126,8 +126,8 @@ bool        _mi_page_is_valid(mi_page_t* page);
   Inlined definitions
 ----------------------------------------------------------- */
 #define UNUSED(x)     (void)(x)
-#if (MI_DEBUG>0) 
-#define UNUSED_RELEASE(x)  
+#if (MI_DEBUG>0)
+#define UNUSED_RELEASE(x)
 #else
 #define UNUSED_RELEASE(x)  UNUSED(x)
 #endif
@@ -168,7 +168,15 @@ extern const mi_heap_t _mi_heap_empty;  // read-only empty heap, initial value o
 extern mi_heap_t _mi_heap_main;         // statically allocated main backing heap
 extern bool _mi_process_is_initialized;
 
-extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
+#ifdef DMalterlib
+	mi_heap_t* _mi_heap_default_get();
+	mi_heap_t* &_mi_heap_default_get_ref();
+	#define _mi_heap_default _mi_heap_default_get()
+	#define _mi_heap_default_ref _mi_heap_default_get_ref()
+#else
+	extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
+	#define _mi_heap_default_ref _mi_heap_default
+#endif
 
 static inline mi_heap_t* mi_get_default_heap(void) {
 #ifdef MI_TLS_RECURSE_GUARD
@@ -356,7 +364,11 @@ static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
 #else
 // otherwise use standard C
 static inline uintptr_t _mi_thread_id(void) mi_attr_noexcept {
-  return (uintptr_t)&_mi_heap_default;
+  #ifdef DMalterlib
+    return NMib::NSys::fg_Thread_GetCurrentUID();
+  #else
+    return (uintptr_t)&_mi_heap_default;
+  #endif
 }
 #endif
 

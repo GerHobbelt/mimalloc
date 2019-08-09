@@ -130,19 +130,19 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   // if abandoning, mark all pages to no longer add to delayed_free
   if (collect == ABANDON) {
     //for (mi_page_t* page = heap->pages[MI_BIN_FULL].first; page != NULL; page = page->next) {
-    //  _mi_page_use_delayed_free(page, false);  // set thread_free.delayed to MI_NO_DELAYED_FREE      
-    //}    
+    //  _mi_page_use_delayed_free(page, false);  // set thread_free.delayed to MI_NO_DELAYED_FREE
+    //}
     mi_heap_visit_pages(heap, &mi_heap_page_never_delayed_free, NULL, NULL);
   }
 
-  // free thread delayed blocks. 
+  // free thread delayed blocks.
   // (if abandoning, after this there are no more local references into the pages.)
   _mi_heap_delayed_free(heap);
 
   // collect all pages owned by this thread
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
   mi_assert_internal( collect != ABANDON || heap->thread_delayed_free == NULL );
-  
+
   // collect segment caches
   if (collect >= FORCE) {
     _mi_segment_thread_collect(&heap->tld->segments);
@@ -216,10 +216,10 @@ static void mi_heap_reset_pages(mi_heap_t* heap) {
 static void mi_heap_free(mi_heap_t* heap) {
   mi_assert_internal(mi_heap_is_initialized(heap));
   if (mi_heap_is_backing(heap)) return; // dont free the backing heap
-  
+
   // reset default
   if (mi_heap_is_default(heap)) {
-    _mi_heap_default = heap->tld->heap_backing;
+    _mi_heap_default_ref = heap->tld->heap_backing;
   }
   // and free the used memory
   mi_free(heap);
@@ -237,7 +237,7 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
   UNUSED(pq);
 
   // ensure no more thread_delayed_free will be added
-  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE);  
+  _mi_page_use_delayed_free(page, MI_NEVER_DELAYED_FREE);
 
   // stats
   if (page->block_size > MI_LARGE_SIZE_MAX) {
@@ -294,7 +294,7 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   if (from==NULL || from->page_count == 0) return;
 
   // unfull all full pages
-  mi_page_t* page = heap->pages[MI_BIN_FULL].first; 
+  mi_page_t* page = heap->pages[MI_BIN_FULL].first;
   while (page != NULL) {
     mi_page_t* next = page->next;
     _mi_page_unfull(page);
@@ -306,7 +306,7 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   _mi_heap_delayed_free(from);
 
   // transfer all pages by appending the queues; this will set
-  // a new heap field which is ok as all pages are unfull'd and thus 
+  // a new heap field which is ok as all pages are unfull'd and thus
   // other threads won't access this field anymore (see `mi_free_block_mt`)
   for (size_t i = 0; i < MI_BIN_FULL; i++) {
     mi_page_queue_t* pq = &heap->pages[i];
@@ -317,7 +317,7 @@ static void mi_heap_absorb(mi_heap_t* heap, mi_heap_t* from) {
   }
   mi_assert_internal(from->thread_delayed_free == NULL);
   mi_assert_internal(from->page_count == 0);
-  
+
   // and reset the `from` heap
   mi_heap_reset_pages(from);
 }
@@ -346,7 +346,7 @@ mi_heap_t* mi_heap_set_default(mi_heap_t* heap) {
   if (!mi_heap_is_initialized(heap)) return NULL;
   mi_assert_expensive(mi_heap_is_valid(heap));
   mi_heap_t* old   = _mi_heap_default;
-  _mi_heap_default = heap;
+  _mi_heap_default_ref = heap;
   return old;
 }
 

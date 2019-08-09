@@ -156,13 +156,17 @@ void _mi_assert_fail(const char* assertion, const char* fname, unsigned line, co
 
 static void mi_strlcpy(char* dest, const char* src, size_t dest_size) {
   dest[0] = 0;
+#ifdef _MSC_VER
   #pragma warning(suppress:4996)
+#endif
   strncpy(dest, src, dest_size - 1);
   dest[dest_size - 1] = 0;
 }
 
 static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
+#ifdef _MSC_VER
   #pragma warning(suppress:4996)
+#endif
   strncat(dest, src, dest_size - 1);
   dest[dest_size - 1] = 0;
 }
@@ -173,14 +177,18 @@ static void mi_option_init(mi_option_desc_t* desc) {
   char buf[32];
   mi_strlcpy(buf, "mimalloc_", sizeof(buf));
   mi_strlcat(buf, desc->name, sizeof(buf));
+#ifdef _MSC_VER
   #pragma warning(suppress:4996)
+#endif
   char* s = getenv(buf);
   if (s == NULL) {
     size_t buf_size = strlen(buf);
     for (size_t i = 0; i < buf_size; i++) {
       buf[i] = toupper(buf[i]);
     }
+#ifdef _MSC_VER
     #pragma warning(suppress:4996)
+#endif
     s = getenv(buf);
   }
   if (s != NULL) {

@@ -7,6 +7,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 
+#ifdef DMalterlib
+#include <Mib/Core/Core>
+#endif
+
 #include <string.h>  // memcpy
 
 // Empty page used to initialize the small free pages array
@@ -83,8 +87,60 @@ const mi_heap_t _mi_heap_empty = {
   false
 };
 
-mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
+void _mi_thread_done(mi_heap_t *heap) mi_attr_noexcept;
 
+#ifdef DMalterlib
+
+struct CMalterlibMiMallocGlobal
+{
+  struct CThreadLocal
+  {
+    mi_heap_t* m_pHeap = (mi_heap_t*)&_mi_heap_empty;
+    ~CThreadLocal()
+    {
+      _mi_thread_done(m_pHeap);
+    }
+  };
+
+  CMalterlibMiMallocGlobal()
+    : m_ThreadLocal
+    (
+      [this] (CThreadLocal *_pParent, bool _bMove) -> CThreadLocal *
+      {
+        return this->m_ThreadLocalPool.f_New();
+      }
+      , [this] (CThreadLocal *_pData)
+      {
+        this->m_ThreadLocalPool.f_Delete(_pData);
+      }
+    )
+  {
+  }
+
+  TCPool<CThreadLocal, 8, NThread::CMutual, NMemory::CPoolType_Freeable, NMib::NMemory::CAllocator_VirtualNoTracking> m_ThreadLocalPool;
+
+  NThread::TCThreadLocalDynamic
+    <
+      CThreadLocal
+      , NThread::EThreadLocalFlag_AlwaysCreated | NThread::EThreadLocalFlag_FastThreadLocal
+    > m_ThreadLocal
+  ;
+};
+
+NMib::NStorage::TCAggregateSimple<CMalterlibMiMallocGlobal> g_MalterlibMiMallocGlobal = {DAggregateInit};
+
+mi_heap_t *_mi_heap_default_get()
+{
+  return (*g_MalterlibMiMallocGlobal).m_ThreadLocal->m_pHeap;
+}
+
+mi_heap_t *&_mi_heap_default_get_ref()
+{
+  return (*g_MalterlibMiMallocGlobal).m_ThreadLocal->m_pHeap;
+}
+#else
+mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
+#endif
 
 #define tld_main_stats  ((mi_stats_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,stats)))
 
@@ -190,7 +246,7 @@ static bool _mi_heap_init(void) {
   if (mi_heap_is_initialized(_mi_heap_default)) return true;
   if (_mi_is_main_thread()) {
     // the main heap is statically allocated
-    _mi_heap_default = &_mi_heap_main;
+    _mi_heap_default_ref = &_mi_heap_main;
     mi_assert_internal(_mi_heap_default->tld->heap_backing == _mi_heap_default);
   }
   else {
@@ -211,18 +267,17 @@ static bool _mi_heap_init(void) {
     tld->heap_backing = heap;
     tld->segments.stats = &tld->stats;
     tld->os.stats = &tld->stats;
-    _mi_heap_default = heap;
+    _mi_heap_default_ref = heap;
   }
   return false;
 }
 
 // Free the thread local default heap (called from `mi_thread_done`)
-static bool _mi_heap_done(void) {
-  mi_heap_t* heap = _mi_heap_default;
+static bool _mi_heap_done(mi_heap_t* heap) {
   if (!mi_heap_is_initialized(heap)) return true;
 
   // reset default heap
-  _mi_heap_default = (_mi_is_main_thread() ? &_mi_heap_main : (mi_heap_t*)&_mi_heap_empty);
+  _mi_heap_default_ref = (_mi_is_main_thread() ? &_mi_heap_main : (mi_heap_t*)&_mi_heap_empty);
 
   // todo: delete all non-backing heaps?
 
@@ -230,7 +285,7 @@ static bool _mi_heap_done(void) {
   heap = heap->tld->heap_backing;
   if (!mi_heap_is_initialized(heap)) return false;
 
-  // collect if not the main thread 
+  // collect if not the main thread
   if (heap != &_mi_heap_main) {
     _mi_heap_collect_abandon(heap);
   }
@@ -273,7 +328,9 @@ static bool _mi_heap_done(void) {
 #define MI_USE_PTHREADS
 #endif
 
-#if defined(_WIN32) && defined(MI_SHARED_LIB)
+#if defined(DMalterlib)
+
+#elif defined(_WIN32) && defined(MI_SHARED_LIB)
   // nothing to do as it is done in DllMain
 #elif defined(_WIN32) && !defined(MI_SHARED_LIB)
   // use thread local storage keys to detect thread ending
@@ -296,6 +353,7 @@ static bool _mi_heap_done(void) {
 
 // Set up handlers so `mi_thread_done` is called automatically
 static void mi_process_setup_auto_thread_done(void) {
+#ifndef DMalterlib
   static bool tls_initialized = false; // fine if it races
   if (tls_initialized) return;
   tls_initialized = true;
@@ -306,8 +364,8 @@ static void mi_process_setup_auto_thread_done(void) {
   #elif defined(MI_USE_PTHREADS)
     pthread_key_create(&mi_pthread_key, &mi_pthread_done);
   #endif
+#endif
 }
-
 
 bool _mi_is_main_thread(void) {
   return (_mi_heap_main.thread_id==0 || _mi_heap_main.thread_id == _mi_thread_id());
@@ -327,6 +385,8 @@ void mi_thread_init(void) mi_attr_noexcept
 
   _mi_stat_increase(&mi_get_default_heap()->tld->stats.threads, 1);
 
+#ifndef DMalterlib
+
   // set hooks so our mi_thread_done() will be called
   #if defined(_WIN32) && defined(MI_SHARED_LIB)
     // nothing to do as it is done in DllMain
@@ -339,23 +399,27 @@ void mi_thread_init(void) mi_attr_noexcept
   #if (MI_DEBUG>0) // not in release mode as that leads to crashes on Windows dynamic override
   _mi_verbose_message("thread init: 0x%zx\n", _mi_thread_id());
   #endif
+#endif
 }
 
-void mi_thread_done(void) mi_attr_noexcept {
+void _mi_thread_done(mi_heap_t *heap) mi_attr_noexcept {
   // stats
-  mi_heap_t* heap = mi_get_default_heap();
   if (!_mi_is_main_thread() && mi_heap_is_initialized(heap))  {
     _mi_stat_decrease(&heap->tld->stats.threads, 1);
   }
 
   // abandon the thread local heap
-  if (_mi_heap_done()) return; // returns true if already ran
+  if (_mi_heap_done(heap)) return; // returns true if already ran
 
   #if (MI_DEBUG>0)
   if (!_mi_is_main_thread()) {
     _mi_verbose_message("thread done: 0x%zx\n", _mi_thread_id());
   }
   #endif
+}
+
+void mi_thread_done() mi_attr_noexcept {
+	_mi_thread_done(mi_get_default_heap());
 }
 
 
@@ -367,6 +431,10 @@ static void mi_process_done(void);
 void mi_process_init(void) mi_attr_noexcept {
   // ensure we are called once
   if (_mi_process_is_initialized) return;
+
+#ifdef DMalterlib
+  g_MalterlibMiMallocGlobal.f_Construct();
+#endif
   // access _mi_heap_default before setting _mi_process_is_initialized to ensure
   // that the TLS slot is allocated without getting into recursion on macOS
   // when using dynamic linking with interpose.
@@ -405,6 +473,10 @@ static void mi_process_done(void) {
     mi_stats_print(NULL);
   }
   _mi_verbose_message("process done: 0x%zx\n", _mi_heap_main.thread_id);
+
+#ifdef DMalterlib
+  g_MalterlibMiMallocGlobal.f_Destruct();
+#endif
 }
 
 
