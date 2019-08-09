@@ -107,7 +107,9 @@ unsigned char* mi_mbsdup(const unsigned char* s)  mi_attr_noexcept {
 int mi_dupenv_s(char** buf, size_t* size, const char* name) mi_attr_noexcept {
   if (buf==NULL || name==NULL) return EINVAL;
   if (size != NULL) *size = 0;
+#ifdef _MSC_VER
   #pragma warning(suppress:4996)
+#endif
   char* p = getenv(name);
   if (p==NULL) {
     *buf = NULL;
