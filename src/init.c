@@ -7,6 +7,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 
+#ifdef DMalterlib
+#include <Mib/Core/Core>
+#endif
+
 #include <string.h>  // memcpy, memset
 #include <stdlib.h>  // atexit
 
@@ -101,9 +105,57 @@ const mi_heap_t _mi_heap_empty = {
   false
 };
 
+static void _mi_thread_done(mi_heap_t* default_heap);
+
+#ifdef DMalterlib
+
+struct CMalterlibMiMallocGlobal
+{
+  struct CThreadLocal
+  {
+    mi_heap_t* m_pHeap = (mi_heap_t*)&_mi_heap_empty;
+    ~CThreadLocal()
+    {
+      _mi_thread_done(m_pHeap);
+    }
+  };
+
+  CMalterlibMiMallocGlobal()
+    : m_ThreadLocal
+    (
+      [this] (CThreadLocal *_pParent, bool _bMove) -> CThreadLocal *
+      {
+        return this->m_ThreadLocalPool.f_New();
+      }
+      , [this] (CThreadLocal *_pData)
+      {
+        this->m_ThreadLocalPool.f_Delete(_pData);
+      }
+    )
+  {
+  }
+
+  TCPool<CThreadLocal, 8, NThread::CMutual, NMemory::CPoolType_Freeable, NMib::NMemory::CAllocator_VirtualNoTracking> m_ThreadLocalPool;
+
+  NThread::TCThreadLocalDynamic
+    <
+      CThreadLocal
+      , NThread::EThreadLocalFlag_AlwaysCreated | NThread::EThreadLocalFlag_FastThreadLocal
+    > m_ThreadLocal
+  ;
+};
+
+constinit NMib::NStorage::TCAggregateSimple<CMalterlibMiMallocGlobal> g_MalterlibMiMallocGlobal = {DAggregateInit};
+
+mi_heap_t *_mi_heap_default_get()
+{
+  return (*g_MalterlibMiMallocGlobal).m_ThreadLocal->m_pHeap;
+}
+
+#else
 // the thread-local default heap for allocation
 mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
-
+#endif
 
 #define tld_main_stats  ((mi_stats_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,stats)))
 #define tld_main_os     ((mi_os_tld_t*)((uint8_t*)&tld_main + offsetof(mi_tld_t,os)))
@@ -268,15 +320,15 @@ static bool _mi_heap_done(mi_heap_t* heap) {
 // to set up the thread local keys.
 // --------------------------------------------------------
 
-static void _mi_thread_done(mi_heap_t* default_heap);
-
 #ifdef __wasi__
 // no pthreads in the WebAssembly Standard Interface
-#elif !defined(_WIN32)
+#elif !defined(_WIN32) && !defined(DMalterlib)
 #define MI_USE_PTHREADS
 #endif
 
-#if defined(_WIN32) && defined(MI_SHARED_LIB)
+#if defined(DMalterlib)
+
+#elif defined(_WIN32) && defined(MI_SHARED_LIB)
   // nothing to do as it is done in DllMain
 #elif defined(_WIN32) && !defined(MI_SHARED_LIB)
   // use thread local storage keys to detect thread ending
@@ -302,6 +354,7 @@ static void _mi_thread_done(mi_heap_t* default_heap);
 
 // Set up handlers so `mi_thread_done` is called automatically
 static void mi_process_setup_auto_thread_done(void) {
+#ifndef DMalterlib
   static bool tls_initialized = false; // fine if it races
   if (tls_initialized) return;
   tls_initialized = true;
@@ -313,6 +366,7 @@ static void mi_process_setup_auto_thread_done(void) {
     mi_assert_internal(_mi_heap_default_key == (pthread_key_t)(-1));
     pthread_key_create(&_mi_heap_default_key, &mi_pthread_done);
   #endif
+#endif
   _mi_heap_set_default_direct(&_mi_heap_main);
 }
 
@@ -355,7 +409,9 @@ static void _mi_thread_done(mi_heap_t* heap) {
 
 void _mi_heap_set_default_direct(mi_heap_t* heap)  {
   mi_assert_internal(heap != NULL);
-  #if defined(MI_TLS_SLOT)
+  #if defined(DMalterlib)
+    (*g_MalterlibMiMallocGlobal).m_ThreadLocal->m_pHeap = heap;
+  #elif defined(MI_TLS_SLOT)
   mi_tls_slot_set(MI_TLS_SLOT,heap);
   #elif defined(MI_TLS_PTHREAD_SLOT_OFS)
   *mi_tls_pthread_heap_slot() = heap;
@@ -367,7 +423,8 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
 
   // ensure the default heap is passed to `_mi_thread_done`
   // setting to a non-NULL value also ensures `mi_thread_done` is called.
-  #if defined(_WIN32) && defined(MI_SHARED_LIB)
+  #if defined(DMalterlib)
+  #elif defined(_WIN32) && defined(MI_SHARED_LIB)
     // nothing to do as it is done in DllMain
   #elif defined(_WIN32) && !defined(MI_SHARED_LIB)
     mi_assert_internal(mi_fls_key != 0);
@@ -455,6 +512,9 @@ static void mi_process_load(void) {
 void mi_process_init(void) mi_attr_noexcept {
   // ensure we are called once
   if (_mi_process_is_initialized) return;
+#ifdef DMalterlib
+  g_MalterlibMiMallocGlobal.f_Construct();
+#endif
   _mi_process_is_initialized = true;
   mi_process_setup_auto_thread_done();
 
@@ -493,6 +553,10 @@ static void mi_process_done(void) {
   mi_allocator_done();
   _mi_verbose_message("process done: 0x%zx\n", _mi_heap_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore
+
+#ifdef DMalterlib
+  g_MalterlibMiMallocGlobal.f_Destruct();
+#endif
 }
 
 

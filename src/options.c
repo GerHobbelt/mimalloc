@@ -211,7 +211,9 @@ static void mi_out_buf_stderr(const char* msg, void* arg) {
 
 // Should be atomic but gives errors on many platforms as generally we cannot cast a function pointer to a uintptr_t.
 // For now, don't register output from multiple threads.
+#ifdef _MSC_VER
 #pragma warning(suppress:4180)
+#endif
 static mi_output_fun* volatile mi_out_default; // = NULL
 static volatile _Atomic(void*) mi_out_arg; // = NULL
 
@@ -376,13 +378,17 @@ void _mi_error_message(int err, const char* fmt, ...) {
 
 static void mi_strlcpy(char* dest, const char* src, size_t dest_size) {
   dest[0] = 0;
+#ifdef _MSC_VER
   #pragma warning(suppress:4996)
+#endif
   strncpy(dest, src, dest_size - 1);
   dest[dest_size - 1] = 0;
 }
 
 static void mi_strlcat(char* dest, const char* src, size_t dest_size) {
+#ifdef _MSC_VER
   #pragma warning(suppress:4996)
+#endif
   strncat(dest, src, dest_size - 1);
   dest[dest_size - 1] = 0;
 }
