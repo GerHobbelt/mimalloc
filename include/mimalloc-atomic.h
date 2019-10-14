@@ -26,7 +26,9 @@ terms of the MIT license. A copy of the license can be found in the file
 #elif defined(_MSC_VER)
 // Use MSVC C wrapper for C11 atomics
 #define  _Atomic(tp)            tp
+#ifndef ATOMIC_VAR_INIT
 #define  ATOMIC_VAR_INIT(x)     x
+#endif
 #define  mi_atomic(name)        mi_atomic_##name
 #define  mi_memory_order(name)  mi_memory_order_##name
 #else

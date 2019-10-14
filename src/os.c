@@ -123,7 +123,7 @@ static PVirtualAlloc2 pVirtualAlloc2 = NULL;
 static PNtAllocateVirtualMemoryEx pNtAllocateVirtualMemoryEx = NULL;
 
 // Similarly, GetNumaProcesorNodeEx is only supported since Windows 7
-#if (_WIN32_WINNT < 0x601)  // before Win7
+#if (_WIN32_WINNT < 0x600)  // before Win7
 typedef struct _PROCESSOR_NUMBER { WORD Group; BYTE Number; BYTE Reserved; } PROCESSOR_NUMBER, *PPROCESSOR_NUMBER;
 #endif
 typedef VOID (__stdcall *PGetCurrentProcessorNumberEx)(PPROCESSOR_NUMBER ProcNumber);
@@ -484,7 +484,7 @@ static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   return (void*)hint;
 }
 #else
-static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
+[[maybe_unused]] static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   UNUSED(try_alignment); UNUSED(size);
   return NULL;
 }
