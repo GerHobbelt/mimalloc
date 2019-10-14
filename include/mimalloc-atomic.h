@@ -15,7 +15,9 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #if defined(_MSC_VER)
 #define _Atomic(tp)         tp
-#define ATOMIC_VAR_INIT(x)  x
+#ifndef ATOMIC_VAR_INIT
+#	define ATOMIC_VAR_INIT(x)  x
+#endif
 #elif defined(__cplusplus)
 #include <atomic>
 #define  _Atomic(tp)        std::atomic<tp>

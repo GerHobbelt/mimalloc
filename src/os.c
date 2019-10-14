@@ -420,7 +420,7 @@ static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   return (void*)hint;
 }
 #else
-static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
+[[maybe_unused]] static void* mi_os_get_aligned_hint(size_t try_alignment, size_t size) {
   UNUSED(try_alignment); UNUSED(size);
   return NULL;
 }
@@ -1011,10 +1011,14 @@ Support NUMA aware allocation
 -----------------------------------------------------------------------------*/
 #ifdef WIN32
 static size_t mi_os_numa_nodex() {
-  PROCESSOR_NUMBER pnum;
   USHORT numa_node = 0;
+  
+#if (_WIN32_WINNT >= 0x0601)
+  PROCESSOR_NUMBER pnum;
   GetCurrentProcessorNumberEx(&pnum);
   GetNumaProcessorNodeEx(&pnum,&numa_node);
+#endif
+
   return numa_node;
 }
 
