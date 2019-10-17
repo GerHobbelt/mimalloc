@@ -554,7 +554,6 @@ void _mi_heap_set_default_direct(mi_heap_t* heap)  {
 // --------------------------------------------------------
 // Run functions on process init/done, and thread init/done
 // --------------------------------------------------------
-static void mi_cdecl mi_process_done(void);
 
 static bool os_preloading = true;    // true until this module is initialized
 static bool mi_redirected = false;   // true if malloc redirects to mi_malloc
@@ -609,7 +608,7 @@ static void mi_process_load(void) {
   #endif
   os_preloading = false;
   mi_assert_internal(_mi_is_main_thread());
-  #if !(defined(_WIN32) && defined(MI_SHARED_LIB))  // use Dll process detach (see below) instead of atexit (issue #521)
+  #if !(defined(_WIN32) && defined(MI_SHARED_LIB)) && !defined(DMalterlib) // use Dll process detach (see below) instead of atexit (issue #521)
   atexit(&mi_process_done);
   #endif
   _mi_options_init();
@@ -692,7 +691,7 @@ void mi_process_init(void) mi_attr_noexcept {
 }
 
 // Called when the process is done (through `at_exit`)
-static void mi_cdecl mi_process_done(void) {
+void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   // only shutdown if we were initialized
   if (!_mi_process_is_initialized) return;
   // ensure we are called once
@@ -732,7 +731,6 @@ static void mi_cdecl mi_process_done(void) {
   g_MalterlibMiMallocGlobal.f_Destruct();
 #endif
 }
-
 
 
 #if defined(_WIN32) && defined(MI_SHARED_LIB)
