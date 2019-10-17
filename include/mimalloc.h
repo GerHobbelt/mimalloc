@@ -121,6 +121,7 @@ mi_decl_export void mi_stats_merge(void)      mi_attr_noexcept;
 mi_decl_export void mi_stats_print(mi_output_fun* out) mi_attr_noexcept;
 
 mi_decl_export void mi_process_init(void)     mi_attr_noexcept;
+mi_decl_export void mi_process_done(void)     mi_attr_noexcept;
 mi_decl_export void mi_thread_init(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_done(void)      mi_attr_noexcept;
 mi_decl_export void mi_thread_stats_print(mi_output_fun* out) mi_attr_noexcept;

@@ -438,7 +438,6 @@ void mi_thread_done() mi_attr_noexcept {
 // --------------------------------------------------------
 // Run functions on process init/done, and thread init/done
 // --------------------------------------------------------
-static void mi_process_done(void);
 
 static bool os_preloading = true;    // true until this module is initialized
 static bool mi_redirected = false;   // true if malloc redirects to mi_malloc
@@ -487,7 +486,9 @@ static void mi_allocator_done() {
 // Called once by the process loader
 static void mi_process_load(void) {
   os_preloading = false;
-  atexit(&mi_process_done);
+  #ifndef DMalterlib
+    atexit(&mi_process_done);
+  #endif
   _mi_options_init();
   mi_process_init();
   //mi_stats_reset();
@@ -538,7 +539,7 @@ void mi_process_init(void) mi_attr_noexcept {
 }
 
 // Called when the process is done (through `at_exit`)
-static void mi_process_done(void) {
+void mi_process_done(void) mi_attr_noexcept {
   // only shutdown if we were initialized
   if (!_mi_process_is_initialized) return;
   // ensure we are called once
@@ -561,7 +562,6 @@ static void mi_process_done(void) {
   g_MalterlibMiMallocGlobal.f_Destruct();
 #endif
 }
-
 
 
 #if defined(_WIN32) && defined(MI_SHARED_LIB)
