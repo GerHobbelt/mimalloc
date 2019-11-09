@@ -134,7 +134,7 @@ struct CMalterlibMiMallocGlobal
   ;
 };
 
-NMib::NStorage::TCAggregateSimple<CMalterlibMiMallocGlobal> g_MalterlibMiMallocGlobal = {DAggregateInit};
+constinit NMib::NStorage::TCAggregateSimple<CMalterlibMiMallocGlobal> g_MalterlibMiMallocGlobal = {DAggregateInit};
 
 mi_heap_t *_mi_heap_default_get()
 {
