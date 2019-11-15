@@ -605,7 +605,7 @@ void mi_process_done(void) mi_attr_noexcept {
     mi_process_load();
     return (_mi_heap_main.thread_id != 0);
   }
-  static bool mi_initialized = _mi_process_init();
+  static bool mi_initialized = false;
 
 #elif defined(__GNUC__) || defined(__clang__)
   // GCC,Clang: use the constructor attribute
