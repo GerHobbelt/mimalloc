@@ -486,7 +486,9 @@ static void mi_allocator_done() {
 #endif
 
 // Called once by the process loader
-static void mi_process_load(void) {
+void mi_process_load(void) mi_attr_noexcept {
+  if (!os_preloading)
+    return;
   mi_heap_main_init();
   #if defined(MI_TLS_RECURSE_GUARD)
   volatile mi_heap_t* dummy = _mi_heap_default; // access TLS to allocate it before setting tls_initialized to true;
@@ -561,7 +563,9 @@ void mi_process_done(void) mi_attr_noexcept {
 }
 
 
-#if defined(_WIN32) && defined(MI_SHARED_LIB)
+#ifdef DMalterlib
+  // Do nothing, we initialize externally
+#elif defined(_WIN32) && defined(MI_SHARED_LIB)
   // Windows DLL: easy to hook into process_init and thread_done
   __declspec(dllexport) BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     UNUSED(reserved);
@@ -581,7 +585,7 @@ void mi_process_done(void) mi_attr_noexcept {
     mi_process_load();
     return (_mi_heap_main.thread_id != 0);
   }
-  static bool mi_initialized = false;
+  static bool mi_initialized = _mi_process_init();
 
 #elif defined(__GNUC__) || defined(__clang__)
   // GCC,Clang: use the constructor attribute
