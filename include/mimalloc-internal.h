@@ -10,6 +10,10 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include "mimalloc-types.h"
 
+#if __APPLE__
+  #include <TargetConditionals.h>
+#endif
+
 #if (MI_DEBUG>0)
 #define mi_trace_message(...)  _mi_trace_message(__VA_ARGS__)
 #else
@@ -711,12 +715,21 @@ static inline void* mi_tls_slot(size_t slot) mi_attr_noexcept {
   __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
   res = tcb[slot];
 #elif defined(__aarch64__)
-  void** tcb; UNUSED(ofs);
-  __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
-  res = tcb[slot];
+  #if TARGET_OS_MAC
+    void** tcb; UNUSED(ofs);
+    size_t tcb_encoded;
+    __asm__ volatile ("mrs %0, tpidrro_el0" : "=r" (tcb_encoded));
+    tcb = (void **)(tcb_encoded & 0xfffffffffffffff8ul);
+    res = tcb[slot];
+  #else
+    void** tcb; UNUSED(ofs);
+    __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
+    res = tcb[slot];
+  #endif
 #endif
   return res;
 }
+
 
 // setting is only used on macOSX for now
 static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
@@ -732,9 +745,17 @@ static inline void mi_tls_slot_set(size_t slot, void* value) mi_attr_noexcept {
   __asm__ volatile ("mrc p15, 0, %0, c13, c0, 3\nbic %0, %0, #3" : "=r" (tcb));
   tcb[slot] = value;
 #elif defined(__aarch64__)
-  void** tcb; UNUSED(ofs);
-  __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
-  tcb[slot] = value;
+  #if TARGET_OS_MAC
+    void** tcb; UNUSED(ofs);
+    size_t tcb_encoded;
+    __asm__ volatile ("mrs %0, tpidrro_el0" : "=r" (tcb_encoded));
+    tcb = (void **)(tcb_encoded & 0xfffffffffffffff8ul);
+    tcb[slot] = value;
+  #else
+    void** tcb; UNUSED(ofs);
+    __asm__ volatile ("mrs %0, tpidr_el0" : "=r" (tcb));
+    tcb[slot] = value;
+  #endif
 #endif
 }
 
