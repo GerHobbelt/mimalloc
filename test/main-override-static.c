@@ -49,7 +49,7 @@ int main(int argc, const char** argv)
   free(p1);
   free(p2);
   free(s);
-  
+
   /* now test if override worked by allocating/freeing across the api's*/
   //p1 = mi_malloc(32);
   //free(p1);
