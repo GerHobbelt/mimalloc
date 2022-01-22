@@ -36,7 +36,13 @@ static void fail_aslr();              // issue #372
 static void tsan_numa_test();         // issue #414
 static void strdup_test();     // issue #445
 
-int main() {
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      mimalloc_override_cpp_test_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
+{
   mi_stats_reset();  // ignore earlier allocations
   heap_thread_free_large();
   heap_no_delete();
