@@ -154,7 +154,7 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 
   // collect regions on program-exit (or shared library unload)
   if (collect >= MI_FORCE && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
-    _mi_mem_collect(&heap->tld->os);
+    //_mi_mem_collect(&heap->tld->os);
   }
 }
 
@@ -272,9 +272,9 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
 
   // stats
   const size_t bsize = mi_page_block_size(page);
-  if (bsize > MI_LARGE_OBJ_SIZE_MAX) {
-    if (bsize > MI_HUGE_OBJ_SIZE_MAX) {
-      mi_heap_stat_decrease(heap, giant, bsize);
+  if (bsize > MI_MEDIUM_OBJ_SIZE_MAX) {
+    if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
+      mi_heap_stat_decrease(heap, large, bsize);
     }
     else {
       mi_heap_stat_decrease(heap, huge, bsize);

@@ -39,12 +39,12 @@ static size_t use_one_size = 0;              // use single object size of `N * s
 
 // #define USE_STD_MALLOC
 #ifdef USE_STD_MALLOC
-#define custom_calloc(n,s)    calloc(n,s)
+#define custom_calloc(n,s)    malloc(n*s)
 #define custom_realloc(p,s)   realloc(p,s)
 #define custom_free(p)        free(p)
 #else
 #include <mimalloc.h>
-#define custom_calloc(n,s)    mi_calloc(n,s)
+#define custom_calloc(n,s)    mi_malloc(n*s)
 #define custom_realloc(p,s)   mi_realloc(p,s)
 #define custom_free(p)        mi_free(p)
 #endif
@@ -182,14 +182,15 @@ static void run_os_threads(size_t nthreads, void (*entry)(intptr_t tid));
 static void test_stress(void) {
   uintptr_t r = rand();
   for (int n = 0; n < ITER; n++) {
-    run_os_threads(THREADS, &stress);
+    run_os_threads(THREADS, &stress);    
     for (int i = 0; i < TRANSFERS; i++) {
       if (chance(50, &r) || n + 1 == ITER) { // free all on last run, otherwise free half of the transfers
         void* p = atomic_exchange_ptr(&transfer[i], NULL);
         free_items(p);
       }
     }
-    // mi_collect(false);
+    //mi_collect(false);
+    //mi_debug_show_arenas();    
 #if !defined(NDEBUG) || defined(MI_TSAN)
     if ((n + 1) % 10 == 0) { printf("- iterations left: %3d\n", ITER - (n + 1)); }
 #endif
@@ -251,16 +252,23 @@ int main(int argc, const char** argv)
 
   // Run ITER full iterations where half the objects in the transfer buffer survive to the next round.
   srand(0x7feb352d);
-  // mi_stats_reset();
+  
+  //mi_reserve_os_memory(512ULL << 20, true, true);
+
+#if !defined(NDEBUG) && !defined(USE_STD_MALLOC)
+  mi_stats_reset();
+#endif
+
 #ifdef STRESS
-    test_stress();
+  test_stress();
 #else
-    test_leak();
+  test_leak();
 #endif
 
 #ifndef USE_STD_MALLOC
   #ifndef NDEBUG
   mi_collect(true);
+  //mi_debug_show_arenas();
   #endif
   mi_stats_print(NULL);
 #endif

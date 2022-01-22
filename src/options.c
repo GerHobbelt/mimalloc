@@ -66,34 +66,37 @@ static mi_option_desc_t options[_mi_option_last] =
   { 0, UNINIT, MI_OPTION(verbose) },
 
   // the following options are experimental and not all combinations make sense.
-  { 1, UNINIT, MI_OPTION(eager_commit) },        // commit per segment directly (4MiB)  (but see also `eager_commit_delay`)
+  { 1, UNINIT, MI_OPTION(eager_commit) },        // commit per segment directly (8MiB)  (but see also `eager_commit_delay`)
   #if defined(_WIN32) || (MI_INTPTR_SIZE <= 4)   // and other OS's without overcommit?
   { 0, UNINIT, MI_OPTION(eager_region_commit) },
-  { 1, UNINIT, MI_OPTION(reset_decommits) },     // reset decommits memory
+  { 0, UNINIT, MI_OPTION(reset_decommits) },     // reset decommits memory
   #else
   { 1, UNINIT, MI_OPTION(eager_region_commit) },
-  { 0, UNINIT, MI_OPTION(reset_decommits) },     // reset uses MADV_FREE/MADV_DONTNEED
+  { 0, UNINIT, MI_OPTION(reset_decommits) },     // legacy; ignored now and reset always uses MADV_FREE/MADV_DONTNEED (issue #518)
   #endif
   { 0, UNINIT, MI_OPTION(large_os_pages) },      // use large OS pages, use only with eager commit to prevent fragmentation of VMA's
   { 0, UNINIT, MI_OPTION(reserve_huge_os_pages) },  // per 1GiB huge pages
   { -1, UNINIT, MI_OPTION(reserve_huge_os_pages_at) }, // reserve huge pages at node N
   { 0, UNINIT, MI_OPTION(reserve_os_memory)     },
   { 0, UNINIT, MI_OPTION(segment_cache) },       // cache N segments per thread
-  { 1, UNINIT, MI_OPTION(page_reset) },          // reset page memory on free
+  { 0, UNINIT, MI_OPTION(page_reset) },          // reset page memory on free
   { 0, UNINIT, MI_OPTION(abandoned_page_reset) },// reset free page memory when a thread terminates
   { 0, UNINIT, MI_OPTION(segment_reset) },       // reset segment memory on free (needs eager commit)
 #if defined(__NetBSD__)
   { 0, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed
+#elif defined(_WIN32)
+  { 4, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
 #else
   { 1, UNINIT, MI_OPTION(eager_commit_delay) },  // the first N segments per thread are not eagerly committed (but per page in the segment on demand)
 #endif
-  { 100, UNINIT, MI_OPTION(reset_delay) },       // reset delay in milli-seconds
-  { 0,   UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes.
-  { 0,   UNINIT, MI_OPTION(limit_os_alloc) },    // 1 = do not use OS memory for allocation (but only reserved arenas)
-  { 100, UNINIT, MI_OPTION(os_tag) },            // only apple specific for now but might serve more or less related purpose
-  { 16,  UNINIT, MI_OPTION(max_errors) },        // maximum errors that are output
-  { 16,  UNINIT, MI_OPTION(max_warnings) }       // maximum warnings that are output
-
+  { 1,    UNINIT, MI_OPTION(allow_decommit) },    // decommit slices when no longer used (after reset_delay milli-seconds)
+  { 25,   UNINIT, MI_OPTION(reset_delay) },       // page reset delay in milli-seconds (= decommit)
+  { 500,  UNINIT, MI_OPTION(segment_decommit_delay) },// decommit delay in milli-seconds for freed segments
+  { 0,    UNINIT, MI_OPTION(use_numa_nodes) },    // 0 = use available numa nodes, otherwise use at most N nodes. 
+  { 0,    UNINIT, MI_OPTION(limit_os_alloc) },    // 1 = do not use OS memory for allocation (but only reserved arenas)
+  { 100,  UNINIT, MI_OPTION(os_tag) },            // only apple specific for now but might serve more or less related purpose
+  { 16,   UNINIT, MI_OPTION(max_errors) },        // maximum errors that are output
+  { 16,   UNINIT, MI_OPTION(max_warnings) }       // maximum warnings that are output
 };
 
 static void mi_option_init(mi_option_desc_t* desc);
