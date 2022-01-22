@@ -10,8 +10,10 @@ terms of the MIT license. A copy of the license can be found in the file
 ----------------------------------------------------------- */
 
 #ifndef MI_IN_PAGE_C
+#if !defined(BUILD_MONOLITHIC)
 #error "this file should be included from 'page.c'"
 #endif
+#else
 
 /* -----------------------------------------------------------
   Minimal alignment in machine words (i.e. `sizeof(void*)`)
@@ -322,3 +324,5 @@ size_t _mi_page_queue_append(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_queue
   }
   return count;
 }
+
+#endif

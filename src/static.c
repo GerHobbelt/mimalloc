@@ -13,6 +13,8 @@ terms of the MIT license. A copy of the license can be found in the file
 #undef _POSIX_C_SOURCE
 #endif
 
+#ifndef BUILD_MONOLITHIC
+
 #include "mimalloc.h"
 #include "mimalloc-internal.h"
 
@@ -37,3 +39,5 @@ terms of the MIT license. A copy of the license can be found in the file
 #endif
 #include "init.c"
 #include "options.c"
+
+#endif // BUILD_MONOLITHIC

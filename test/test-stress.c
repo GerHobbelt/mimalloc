@@ -218,7 +218,14 @@ static void test_leak(void) {
 }
 #endif
 
-int main(int argc, char** argv) {  
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      mimalloc_stress_test_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
+{
   // > mimalloc-test-stress [THREADS] [SCALE] [ITER]
   if (argc >= 2) {
     char* end;
