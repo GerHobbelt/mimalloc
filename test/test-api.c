@@ -41,15 +41,22 @@ we therefore test the API over various inputs. Please add more tests :-)
 // ---------------------------------------------------------------------------
 // Test functions
 // ---------------------------------------------------------------------------
-bool test_heap1(void);
-bool test_heap2(void);
-bool test_stl_allocator1(void);
-bool test_stl_allocator2(void);
+static bool test_heap1(void);
+static bool test_heap2(void);
+static bool test_stl_allocator1(void);
+static bool test_stl_allocator2(void);
 
 // ---------------------------------------------------------------------------
 // Main testing
 // ---------------------------------------------------------------------------
-int main(void) {
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      mimalloc_test_api_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
+{
   mi_option_disable(mi_option_verbose);
 
   // ---------------------------------------------------
@@ -204,7 +211,7 @@ int main(void) {
 // Larger test functions
 // ---------------------------------------------------
 
-bool test_heap1() {
+static bool test_heap1() {
   mi_heap_t* heap = mi_heap_new();
   int* p1 = mi_heap_malloc_tp(heap,int);
   int* p2 = mi_heap_malloc_tp(heap,int);
@@ -213,7 +220,7 @@ bool test_heap1() {
   return true;
 }
 
-bool test_heap2() {
+static bool test_heap2() {
   mi_heap_t* heap = mi_heap_new();
   int* p1 = mi_heap_malloc_tp(heap,int);
   int* p2 = mi_heap_malloc_tp(heap,int);
@@ -224,7 +231,7 @@ bool test_heap2() {
   return true;
 }
 
-bool test_stl_allocator1() {
+static bool test_stl_allocator1() {
 #ifdef __cplusplus
   std::vector<int, mi_stl_allocator<int> > vec;
   vec.push_back(1);
@@ -237,7 +244,7 @@ bool test_stl_allocator1() {
 
 struct some_struct  { int i; int j; double z; };
 
-bool test_stl_allocator2() {
+static bool test_stl_allocator2() {
 #ifdef __cplusplus
   std::vector<some_struct, mi_stl_allocator<some_struct> > vec;
   vec.push_back(some_struct());

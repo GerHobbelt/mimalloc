@@ -22,7 +22,14 @@ static void test_reserved(void);
 static void negative_stat(void);
 static void alloc_huge(void);
 
-int main() {
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      mimalloc_override_static_test_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
+{
   mi_version();
   mi_stats_reset();
   // detect double frees and heap corruption

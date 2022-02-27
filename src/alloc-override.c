@@ -6,8 +6,10 @@ terms of the MIT license. A copy of the license can be found in the file
 -----------------------------------------------------------------------------*/
 
 #if !defined(MI_IN_ALLOC_C)
+#if !defined(BUILD_MONOLITHIC)
 #error "this file should be included from 'alloc.c' (so aliases can work)"
 #endif
+#else
 
 #if defined(MI_MALLOC_OVERRIDE) && defined(_WIN32) && !(defined(MI_SHARED_LIB) && defined(_DLL))
 #error "It is only possible to override "malloc" on Windows when building as a DLL (and linking the C runtime as a DLL)"
@@ -277,3 +279,5 @@ void* _aligned_malloc(size_t alignment, size_t size)    { return mi_aligned_allo
 #endif
 
 #endif // MI_MALLOC_OVERRIDE && !_WIN32
+
+#endif
