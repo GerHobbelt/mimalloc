@@ -2,7 +2,7 @@
 #include <assert.h>
 #include <mimalloc.h>
 
-void test_heap(void* p_out) {
+static void test_heap(void* p_out) {
   mi_heap_t* heap = mi_heap_new();
   void* p1 = mi_heap_malloc(heap,32);
   void* p2 = mi_heap_malloc(heap,48);
@@ -11,7 +11,7 @@ void test_heap(void* p_out) {
   //mi_heap_delete(heap); mi_free(p1); mi_free(p2);
 }
 
-void test_large() {
+static void test_large() {
   const size_t N = 1000;
 
   for (size_t i = 0; i < N; ++i) {
@@ -22,7 +22,14 @@ void test_large() {
   }
 }
 
-int main() {
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      mimalloc_test_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
+{
   void* p1 = mi_malloc(16);
   void* p2 = mi_malloc(1000000);
   mi_free(p1);

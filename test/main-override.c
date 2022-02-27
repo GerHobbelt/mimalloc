@@ -5,7 +5,14 @@
 
 #include <mimalloc-override.h>
 
-int main() {
+
+
+#if defined(BUILD_MONOLITHIC)
+#define main(cnt, arr)      mimalloc_override_c_test_main(cnt, arr)
+#endif
+
+int main(int argc, const char** argv)
+{
   mi_version();       // ensure mimalloc library is linked
   void* p1 = malloc(78);
   void* p2 = malloc(24);
