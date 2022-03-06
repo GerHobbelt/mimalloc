@@ -304,7 +304,7 @@ static const mi_block_t* mi_block_predecessor(const mi_page_t* page, const mi_bl
   mi_assert_internal(bsize > 0);
   if (bsize >= MI_HUGE_BLOCK_SIZE) return NULL;
   const mi_block_t* prev = (const mi_block_t*)((uint8_t*)block - bsize);
-  uint8_t* pstart = _mi_segment_page_start(_mi_page_segment(page), page, bsize, NULL, NULL);
+  uint8_t* pstart = _mi_segment_page_start(_mi_page_segment(page), page, NULL);
   if (pstart > (uint8_t*)prev) return NULL;
   return prev;
 }
