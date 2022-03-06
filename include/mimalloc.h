@@ -317,16 +317,25 @@ typedef enum mi_option_e {
   mi_option_reserve_os_memory,        // reserve specified amount of OS memory at startup
   mi_option_segment_cache,
   mi_option_page_reset,
-  mi_option_abandoned_page_decommit,
-  mi_option_deprecated_segment_reset,
+  mi_option_abandoned_page_decommit,  // force? perform delayed decommits
+  mi_option_deprecated_segment_reset, // XXX unused
+  mi_option_abandoned_page_reset,     // unused
   mi_option_eager_commit_delay,
-  mi_option_decommit_delay,
   mi_option_use_numa_nodes,           // 0 = use available numa nodes, otherwise use at most N nodes.
   mi_option_limit_os_alloc,           // 1 = do not use OS memory for allocation (but only reserved arenas)
+
+  // v1.x specific options
   mi_option_os_tag,
   mi_option_max_errors,
   mi_option_max_warnings,
+  mi_option_eager_region_commit,
+  mi_option_segment_reset,
+  mi_option_reset_delay,              // unused
+  mi_option_reset_decommits,
+
+  // v2.x specific options
   mi_option_allow_decommit,
+  mi_option_decommit_delay,
   mi_option_segment_decommit_delay,  
   mi_option_decommit_extend_delay,
   _mi_option_last
