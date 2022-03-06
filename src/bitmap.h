@@ -7,7 +7,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 /* ----------------------------------------------------------------------------
 Concurrent bitmap that can set/reset sequences of bits atomically,
-represeted as an array of fields where each field is a machine word (`size_t`)
+represented as an array of fields where each field is a machine word (`size_t`)
 
 There are two api's; the standard one cannot have sequences that cross
 between the bitmap fields (and a sequence must be <= MI_BITMAP_FIELD_BITS).
@@ -40,6 +40,11 @@ static inline mi_bitmap_index_t mi_bitmap_index_create(size_t idx, size_t bitidx
   return (idx*MI_BITMAP_FIELD_BITS) + bitidx;
 }
 
+// Create a bit index.
+static inline mi_bitmap_index_t mi_bitmap_index_create_from_bit(size_t full_bitidx) {  
+  return mi_bitmap_index_create(full_bitidx / MI_BITMAP_FIELD_BITS, full_bitidx % MI_BITMAP_FIELD_BITS);
+}
+
 // Get the field index from a bit index.
 static inline size_t mi_bitmap_index_field(mi_bitmap_index_t bitmap_idx) {
   return (bitmap_idx / MI_BITMAP_FIELD_BITS);
@@ -69,7 +74,7 @@ bool _mi_bitmap_try_find_from_claim(mi_bitmap_t bitmap, const size_t bitmap_fiel
 
 // Set `count` bits at `bitmap_idx` to 0 atomically
 // Returns `true` if all `count` bits were 1 previously.
-bool mi_bitmap_unclaim(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx);
+bool _mi_bitmap_unclaim(mi_bitmap_t bitmap, size_t bitmap_fields, size_t count, mi_bitmap_index_t bitmap_idx);
 
 // Set `count` bits at `bitmap_idx` to 1 atomically
 // Returns `true` if all `count` bits were 0 previously. `any_zero` is `true` if there was at least one zero bit.
