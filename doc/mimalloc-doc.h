@@ -812,12 +812,14 @@ typedef enum mi_option_e {
   mi_option_segment_cache,   ///< The number of segments per thread to keep cached (0).
   mi_option_page_reset,      ///< Reset page memory after \a mi_option_reset_delay milliseconds when it becomes free.
   mi_option_abandoned_page_reset, //< Reset free page memory when a thread terminates.
-  mi_option_use_numa_nodes,  ///< Pretend there are at most N NUMA nodes; Use 0 to use the actual detected NUMA nodes at runtime.
   mi_option_eager_commit_delay,  ///< the first N segments per thread are not eagerly committed (=1). 
-  mi_option_os_tag,          ///< OS tag to assign to mimalloc'd memory
+  mi_option_use_numa_nodes,  ///< Pretend there are at most N NUMA nodes; Use 0 to use the actual detected NUMA nodes at runtime.
   mi_option_limit_os_alloc,  ///< If set to 1, do not use OS memory for allocation (but only pre-reserved arenas)
 
   // v1.x specific options
+  mi_option_os_tag,          ///< OS tag to assign to mimalloc'd memory
+  mi_option_max_errors,
+  mi_option_max_warnings,
   mi_option_eager_region_commit, ///< Eagerly commit large (256MiB) memory regions (enabled by default, except on Windows)
   mi_option_segment_reset,   ///< Experimental
   mi_option_reset_delay,     ///< Delay in milli-seconds before resetting a page (100ms by default)
