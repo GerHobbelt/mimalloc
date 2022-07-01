@@ -274,7 +274,7 @@ int main(int argc, const char** argv)
   //mi_debug_show_arenas();
   #endif
   mi_stats_print(NULL);
-#endif
+#endif  
   //bench_end_program();
   return 0;
 }

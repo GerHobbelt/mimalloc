@@ -64,7 +64,7 @@ static void* zone_valloc(malloc_zone_t* zone, size_t size) {
 
 static void zone_free(malloc_zone_t* zone, void* p) {
   MI_UNUSED(zone);
-  mi_free(p);
+  mi_cfree(p);
 }
 
 static void* zone_realloc(malloc_zone_t* zone, void* p, size_t newsize) {
@@ -254,7 +254,7 @@ static malloc_zone_t mi_malloc_zone = {
 static inline malloc_zone_t* mi_get_default_zone(void)
 {
   static bool init;
-  if (mi_unlikely(!init)) { 
+  if mi_unlikely(!init) { 
     init = true;
     malloc_zone_register(&mi_malloc_zone);  // by calling register we avoid a zone error on free (see <http://eatmyrandom.blogspot.com/2010/03/mallocfree-interception-on-mac-os-x.html>)
   }
@@ -373,7 +373,7 @@ __attribute__((used)) static const struct mi_interpose_s _mi_zone_interposes[]  
   MI_INTERPOSE_MI(_malloc_fork_child),
   MI_INTERPOSE_MI(_malloc_fork_parent),
   MI_INTERPOSE_MI(_malloc_fork_prepare),
-
+  
   MI_INTERPOSE_ZONE(zone_batch_free),
   MI_INTERPOSE_ZONE(zone_batch_malloc),
   MI_INTERPOSE_ZONE(zone_calloc),

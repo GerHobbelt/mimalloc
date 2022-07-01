@@ -166,7 +166,7 @@ mi_decl_export void mi_process_info(size_t* elapsed_msecs, size_t* user_msecs, s
 // Note that `alignment` always follows `size` for consistency with unaligned
 // allocation, but unfortunately this differs from `posix_memalign` and `aligned_alloc`.
 // -------------------------------------------------------------------------------------
-#define MI_ALIGNMENT_MAX   (1024*1024UL)    // maximum supported alignment is 1MiB
+#define MI_ALIGNMENT_MAX   (16*1024*1024UL)  // maximum supported alignment is 16MiB
 
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_malloc_aligned(size_t size, size_t alignment) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1) mi_attr_alloc_align(2);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_malloc_aligned_at(size_t size, size_t alignment, size_t offset) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(1);
@@ -256,6 +256,7 @@ typedef struct mi_heap_area_s {
   size_t committed;   // current available bytes for this area
   size_t used;        // number of allocated blocks
   size_t block_size;  // size in bytes of each block
+  size_t full_block_size; // size in bytes of a full block including padding and metadata.
 } mi_heap_area_t;
 
 typedef bool (mi_cdecl mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* area, void* block, size_t block_size, void* arg);
@@ -315,7 +316,7 @@ typedef enum mi_option_e {
   mi_option_reserve_huge_os_pages,    // reserve N huge OS pages (1GiB) at startup
   mi_option_reserve_huge_os_pages_at, // reserve huge OS pages at a specific NUMA node
   mi_option_reserve_os_memory,        // reserve specified amount of OS memory at startup
-  mi_option_segment_cache,
+  mi_option_deprecated_segment_cache,
   mi_option_page_reset,
   mi_option_abandoned_page_decommit,  // force? perform delayed decommits
   mi_option_deprecated_segment_reset, // XXX unused
@@ -328,6 +329,8 @@ typedef enum mi_option_e {
   mi_option_os_tag,
   mi_option_max_errors,
   mi_option_max_warnings,
+  mi_option_max_segment_reclaim,
+  mi_option_allow_decommit,
   mi_option_eager_region_commit,
   mi_option_segment_reset,
   mi_option_reset_delay,              // unused
@@ -349,6 +352,7 @@ mi_decl_export void mi_option_set_enabled(mi_option_t option, bool enable);
 mi_decl_export void mi_option_set_enabled_default(mi_option_t option, bool enable);
 
 mi_decl_nodiscard mi_decl_export long mi_option_get(mi_option_t option);
+mi_decl_nodiscard mi_decl_export long mi_option_get_clamp(mi_option_t option, long min, long max);
 mi_decl_export void mi_option_set(mi_option_t option, long value);
 mi_decl_export void mi_option_set_default(mi_option_t option, long value);
 
