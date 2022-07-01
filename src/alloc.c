@@ -96,16 +96,14 @@ static inline mi_decl_restrict void* mi_heap_malloc_small_zero(mi_heap_t* heap, 
   #if (MI_PADDING_EXTRA > 0 || MI_DEBUG_TRACE > 0)
   // with extra padding it is not guaranteed the size + MI_PADDING_SIZE <= MI_SMALL_SIZE_MAX + MI_PADDING_MINSIZE, so we need an extra check
   if (size + MI_PADDING_SIZE > MI_SMALL_SIZE_MAX) {
-    p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE);
+    p = _mi_malloc_generic(heap, size + MI_PADDING_SIZE, zero);
   }
   else 
   #endif
   {    
     mi_page_t* page = _mi_heap_get_free_small_page(heap, size + MI_PADDING_SIZE);
-    void* p = _mi_page_malloc(heap, page, size + MI_PADDING_SIZE, zero);
+    p = _mi_page_malloc(heap, page, size + MI_PADDING_SIZE, zero);
   }
-  mi_assert_internal(p == NULL || mi_usable_size(p) >= size);
-#if MI_STAT>1
   if (p != NULL) {
     if (!mi_heap_is_initialized(heap)) { heap = mi_get_default_heap(); }
     mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
@@ -125,7 +123,7 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_malloc_small(size_t si
 
 // The main allocation function
 extern inline void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept {
-  if mi_likely(size + MI_PADDING_SIZE <= MI_SMALL_SIZE_MAX + MI_PADDING_MINSIZE) {
+  if mi_likely(size + MI_PADDING_SIZE <= MI_SMALL_SIZE_MAX + MI_PADDING_MINSIZE) {  
     return mi_heap_malloc_small_zero(heap, size, zero);
   }
   else 
@@ -236,7 +234,7 @@ static bool mi_verify_padding(const mi_page_t* page, const mi_block_t* block, si
 static void mi_check_padding(const mi_page_t* page, const mi_block_t* block) {
   size_t size;
   size_t wrong;
-  if (mi_unlikely(!mi_verify_padding(page,block,&size,&wrong))) {
+  if mi_unlikely(!mi_verify_padding(page,block,&size,&wrong)) {
     _mi_show_block_trace_with_predecessor(page, block, NULL);
     _mi_error_message(EFAULT, "buffer overflow in heap block %p of size %zu: write after %zu bytes\n", block, size, wrong );
   }
@@ -286,8 +284,8 @@ static void _mi_show_block_trace(const mi_page_t* page, const mi_block_t* block,
 
 static const mi_block_t* mi_block_predecessor(const mi_page_t* page, const mi_block_t* block) {
   const size_t bsize = page->xblock_size;
-  mi_assert_internal(bsize > 0);
-  if (bsize >= MI_HUGE_BLOCK_SIZE) return NULL;
+  mi_assert_internal(bsize > 0 || page->used == 0);
+  if (bsize == 0 /* if page is freed */|| bsize >= MI_HUGE_BLOCK_SIZE) return NULL;
   const mi_block_t* prev = (const mi_block_t*)((uint8_t*)block - bsize);
   uint8_t* pstart = _mi_segment_page_start(_mi_page_segment(page), page, NULL);
   if (pstart > (uint8_t*)prev) return NULL;
@@ -718,9 +716,6 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
     if mi_likely(p != NULL) {
       if mi_likely(_mi_is_aligned(p, sizeof(uintptr_t))) {  // a client may pass in an arbitrary pointer `p`..
         _mi_memcpy_aligned(newp, p, (newsize > size ? size : newsize));
-      }
-      else {
-        _mi_memcpy(newp, p, (newsize > size ? size : newsize));
       }
       mi_free(p); // only free the original pointer if successful
     }

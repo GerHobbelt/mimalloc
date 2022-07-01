@@ -37,7 +37,7 @@ int main(int argc, const char** argv)
   // double_free1();
   // double_free2();
   double_free3();
-  corrupt_free1();
+  // corrupt_free1();
   // corrupt_free2();
   // block_overflow1();
   // block_overflow2();

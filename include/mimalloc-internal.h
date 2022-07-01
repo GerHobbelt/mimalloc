@@ -262,7 +262,7 @@ static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
     return ((sz / alignment) * alignment);
   }
 }
-
+  
 // Divide upwards: `s <= _mi_divide_up(s,d)*d < s+d`.
 static inline uintptr_t _mi_divide_up(uintptr_t size, size_t divider) {
   mi_assert_internal(divider != 0);
@@ -502,7 +502,6 @@ static inline mi_page_t* _mi_ptr_page(void* p) {
 // Get the block size of a page (special case for huge objects)
 static inline size_t mi_page_block_size(const mi_page_t* page) {
   const size_t bsize = page->xblock_size;
-  mi_assert_internal(bsize > 0);  
   if mi_likely(bsize < MI_HUGE_BLOCK_SIZE) {
     return bsize;
   }
