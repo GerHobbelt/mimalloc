@@ -806,8 +806,8 @@ static mi_page_t* mi_large_huge_page_alloc(mi_heap_t* heap, size_t size) {
       mi_assert_internal(_mi_page_segment(page)->kind != MI_SEGMENT_HUGE);
     }
     if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
-      mi_heap_stat_increase(heap, giant, bsize);
-      mi_heap_stat_counter_increase(heap, giant_count, 1);
+      mi_heap_stat_increase(heap, large, bsize);
+      mi_heap_stat_counter_increase(heap, large_count, 1);
     }
     else {
       mi_heap_stat_increase(heap, huge, bsize);
