@@ -94,6 +94,7 @@ void       _mi_mem_free(void* p, size_t size, size_t alignment, size_t align_off
 bool       _mi_mem_reset(void* p, size_t size, mi_os_tld_t* tld);
 bool       _mi_mem_unreset(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld);
 bool       _mi_mem_commit(void* p, size_t size, bool* is_zero, mi_os_tld_t* tld);
+bool       _mi_mem_decommit(void* p, size_t size, mi_os_tld_t* tld);
 bool       _mi_mem_protect(void* addr, size_t size);
 bool       _mi_mem_unprotect(void* addr, size_t size);
 
@@ -138,6 +139,7 @@ uint8_t    _mi_bin(size_t size);                // for stats
 void       _mi_heap_destroy_pages(mi_heap_t* heap);
 void       _mi_heap_collect_abandon(mi_heap_t* heap);
 void       _mi_heap_set_default_direct(mi_heap_t* heap);
+void       _mi_heap_destroy_all(void);
 
 // "stats.c"
 void       _mi_stats_done(mi_stats_t* stats);
@@ -153,6 +155,7 @@ void*       _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool zero, siz
 void*       _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero) mi_attr_noexcept;
 mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* page, const void* p);
 bool        _mi_free_delayed_block(mi_block_t* block);
+void        _mi_free_generic(const mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept;  // for runtime integration
 
 #if MI_DEBUG>1
 bool        _mi_page_is_valid(mi_page_t* page);
@@ -483,6 +486,10 @@ static inline size_t mi_page_block_size(const mi_page_t* page) {
     _mi_segment_page_start(_mi_page_segment(page), page, bsize, &psize, NULL);
     return psize;
   }
+}
+
+static inline bool mi_page_is_huge(const mi_page_t* page) {
+  return (_mi_page_segment(page)->page_kind == MI_PAGE_HUGE);
 }
 
 // Get the usable block size of a page without fixed padding.

@@ -51,7 +51,9 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   }
 
 #if (MI_DEBUG>0) && !MI_TRACK_ENABLED
-  if (!page->is_zero && !zero) { memset(block, MI_DEBUG_UNINIT, mi_page_usable_block_size(page)); }
+  if (!page->is_zero && !zero && !mi_page_is_huge(page)) { 
+    memset(block, MI_DEBUG_UNINIT, mi_page_usable_block_size(page)); 
+  }
 #elif (MI_SECURE!=0)
   if (!zero) { block->next = 0; } // don't leak internal data
 #endif
@@ -77,9 +79,11 @@ extern inline void* _mi_page_malloc(mi_heap_t* heap, mi_page_t* page, size_t siz
   #endif
   padding->canary = (uint32_t)(mi_ptr_encode(page,block,page->keys));
   padding->delta  = (uint32_t)(delta);
-  uint8_t* fill = (uint8_t*)padding - delta;
-  const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes
-  for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
+  if (!mi_page_is_huge(page)) {
+    uint8_t* fill = (uint8_t*)padding - delta;
+    const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // set at most N initial padding bytes
+    for (size_t i = 0; i < maxpad; i++) { fill[i] = MI_DEBUG_PADDING; }
+  }
 #endif
 
   return block;
@@ -250,17 +254,19 @@ static bool mi_verify_padding(const mi_page_t* page, const mi_block_t* block, si
   if (!ok) return false;
   mi_assert_internal(bsize >= delta);
   *size = bsize - delta;
-  uint8_t* fill = (uint8_t*)block + bsize - delta;
-  const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // check at most the first N padding bytes
-  mi_track_mem_defined(fill,maxpad);
-  for (size_t i = 0; i < maxpad; i++) {
-    if (fill[i] != MI_DEBUG_PADDING) {
-      *wrong = bsize - delta + i;
-      ok = false;
-      break;
+  if (!mi_page_is_huge(page)) {
+    uint8_t* fill = (uint8_t*)block + bsize - delta;
+    const size_t maxpad = (delta > MI_MAX_ALIGN_SIZE ? MI_MAX_ALIGN_SIZE : delta); // check at most the first N padding bytes
+    mi_track_mem_defined(fill, maxpad);
+    for (size_t i = 0; i < maxpad; i++) {
+      if (fill[i] != MI_DEBUG_PADDING) {
+        *wrong = bsize - delta + i;
+        ok = false;
+        break;
+      }
     }
+    mi_track_mem_noaccess(fill, maxpad);
   }
-  mi_track_mem_noaccess(fill,maxpad);
   return ok;
 }
 
@@ -361,10 +367,7 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
   // that is safe as these are constant and the page won't be freed (as the block is not freed yet).
   mi_check_padding(page, block);
   mi_padding_shrink(page, block, sizeof(mi_block_t));       // for small size, ensure we can fit the delayed thread pointers without triggering overflow detection
-  #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED                    // note: when tracking, cannot use mi_usable_size with multi-threading
-  memset(block, MI_DEBUG_FREED, mi_usable_size(block));
-  #endif
-
+  
   // huge page segments are always abandoned and can be freed immediately
   mi_segment_t* const segment = _mi_page_segment(page);
   if (segment->page_kind==MI_PAGE_HUGE) {
@@ -372,6 +375,10 @@ static mi_decl_noinline void _mi_free_block_mt(mi_page_t* page, mi_block_t* bloc
     _mi_segment_huge_page_free(segment, page, block);
     return;
   }
+
+  #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED                    // note: when tracking, cannot use mi_usable_size with multi-threading
+  memset(block, MI_DEBUG_FREED, mi_usable_size(block));
+  #endif
 
   // Try to put the block on either the page-local thread free list, or the heap delayed free list.
   mi_thread_free_t tfreex;
@@ -449,12 +456,12 @@ mi_block_t* _mi_page_ptr_unalign(const mi_segment_t* segment, const mi_page_t* p
 }
 
 
-static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, bool local, void* p) mi_attr_noexcept {
-  mi_page_t* const page = _mi_segment_page_of(segment, p);
+void mi_decl_noinline _mi_free_generic(const mi_segment_t* segment, mi_page_t* page, bool is_local, void* p) mi_attr_noexcept {
+  //mi_page_t* const page = _mi_segment_page_of(segment, p);
   mi_block_t* const block = (mi_page_has_aligned(page) ? _mi_page_ptr_unalign(segment, page, p) : (mi_block_t*)p);
   mi_stat_free(page, block);                 // stat_free may access the padding
   mi_track_free(p);
-  _mi_free_block(page, local, block);  
+  _mi_free_block(page, is_local, block);  
 }
 
 // Get the segment data belonging to a pointer
@@ -463,6 +470,8 @@ static void mi_decl_noinline mi_free_generic(const mi_segment_t* segment, bool l
 static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* msg) 
 {
   MI_UNUSED(msg);
+  mi_assert(p != NULL);
+
 #if (MI_DEBUG>0)
   if mi_unlikely(((uintptr_t)p & (MI_INTPTR_SIZE - 1)) != 0) {
     _mi_error_message(EINVAL, "%s: invalid (unaligned) pointer: %p\n", msg, p);
@@ -470,8 +479,8 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
   }
 #endif
 
-  if mi_unlikely(p == NULL) return NULL;
   mi_segment_t* const segment = _mi_ptr_segment(p);
+  mi_assert_internal(segment != NULL);
 
 #if (MI_DEBUG>0)
   if mi_unlikely(!mi_is_in_heap_region(p)) {
@@ -488,38 +497,44 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
     return NULL;
   }
 #endif
+
   return segment;
 }
 
 // Free a block 
+// fast path written carefully to prevent spilling on the stack
 void mi_free(void* p) mi_attr_noexcept
 {
+  if mi_unlikely(p == NULL) return;
   mi_segment_t* const segment = mi_checked_ptr_segment(p,"mi_free");
-  if mi_unlikely(segment == NULL) return; 
-
-  mi_threadid_t tid = _mi_thread_id();
-  mi_page_t* const page = _mi_segment_page_of(segment, p);
-  mi_block_t* const block = (mi_block_t*)p;
-
-  if mi_likely(tid == mi_atomic_load_relaxed(&segment->thread_id) && page->flags.full_aligned == 0) {  // the thread id matches and it is not a full page, nor has aligned blocks
-    // local, and not full or aligned
-    if mi_unlikely(mi_check_is_double_free(page,block)) return;      
-    mi_check_padding(page, block);
-    mi_stat_free(page, block);
-    #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED
-    memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
-    #endif
-    mi_track_free(p);
-    mi_block_set_next(page, block, page->local_free);
-    page->local_free = block;
-    if mi_unlikely(--page->used == 0) {   // using this expression generates better code than: page->used--; if (mi_page_all_free(page))    
-      _mi_page_retire(page);
-    }    
+  const bool          is_local= (_mi_thread_id() == mi_atomic_load_relaxed(&segment->thread_id));
+  mi_page_t* const    page    = _mi_segment_page_of(segment, p);
+  
+  if mi_likely(is_local) {                       // thread-local free?
+    if mi_likely(page->flags.full_aligned == 0)  // and it is not a full page (full pages need to move from the full bin), nor has aligned blocks (aligned blocks need to be unaligned)
+    {  
+      mi_block_t* const block = (mi_block_t*)p;
+      if mi_unlikely(mi_check_is_double_free(page, block)) return;
+      mi_check_padding(page, block);
+      mi_stat_free(page, block);
+      #if (MI_DEBUG!=0) && !MI_TRACK_ENABLED
+      memset(block, MI_DEBUG_FREED, mi_page_block_size(page));
+      #endif
+      mi_track_free(p);
+      mi_block_set_next(page, block, page->local_free);
+      page->local_free = block;
+      if mi_unlikely(--page->used == 0) {   // using this expression generates better code than: page->used--; if (mi_page_all_free(page))    
+        _mi_page_retire(page);
+      }
+    }
+    else {
+      // page is full or contains (inner) aligned blocks; use generic path
+      _mi_free_generic(segment, page, true, p);
+    }
   }
   else {
-    // non-local, aligned blocks, or a full page; use the more generic path
-    // note: recalc page in generic to improve code generation
-    mi_free_generic(segment, tid == segment->thread_id, p);
+    // not thread-local; use generic path
+    _mi_free_generic(segment, page, false, p);
   }  
 }
 
@@ -558,8 +573,8 @@ mi_decl_noinline static size_t mi_page_usable_aligned_size_of(const mi_segment_t
 }
 
 static inline size_t _mi_usable_size(const void* p, const char* msg) mi_attr_noexcept {
+  if (p == NULL) return 0;
   const mi_segment_t* const segment = mi_checked_ptr_segment(p, msg);
-  if (segment==NULL) return 0;  // also returns 0 if `p == NULL`
   const mi_page_t* const page = _mi_segment_page_of(segment, p);  
   if mi_likely(!mi_page_has_aligned(page)) {
     const mi_block_t* block = (const mi_block_t*)p;
