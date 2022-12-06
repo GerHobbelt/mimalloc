@@ -260,9 +260,13 @@ static mi_page_t* mi_page_fresh_alloc(mi_heap_t* heap, mi_page_queue_t* pq, size
     // this may be out-of-memory, or an abandoned page was reclaimed (and in our queue)
     return NULL;
   }
-  // a fresh page was found, initialize it
   mi_assert_internal(pq==NULL || _mi_page_segment(page)->page_kind != MI_PAGE_HUGE);
-  mi_page_init(heap, page, block_size, heap->tld);
+  mi_assert_internal(pq!=NULL || page->xblock_size != 0);
+  mi_assert_internal(pq!=NULL || mi_page_block_size(page) >= block_size);
+  // a fresh page was found, initialize it
+  const size_t full_block_size = (pq == NULL ? mi_page_block_size(page) : block_size); // see also: mi_segment_huge_page_alloc
+  mi_assert_internal(full_block_size >= block_size);
+  mi_page_init(heap, page, full_block_size, heap->tld);
   mi_heap_stat_increase(heap, pages, 1);
   if (pq!=NULL) mi_page_queue_push(heap, pq, page); // huge pages use pq==NULL
   mi_assert_expensive(_mi_page_is_valid(page));
@@ -792,7 +796,7 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
 // that frees the block can free the whole page and segment directly.
 static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_alignment) {
   size_t block_size = _mi_os_good_alloc_size(size);
-  mi_assert_internal(mi_bin(block_size) == MI_BIN_HUGE);
+  mi_assert_internal(mi_bin(block_size) == MI_BIN_HUGE || page_alignment > 0);
   mi_page_t* page = mi_page_fresh_alloc(heap,NULL,block_size,page_alignment);
   if (page != NULL) {
     const size_t bsize = mi_page_block_size(page);  // note: not `mi_page_usable_block_size` as `size` includes padding already

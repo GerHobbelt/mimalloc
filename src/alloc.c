@@ -117,8 +117,9 @@ mi_decl_nodiscard extern inline mi_decl_restrict void* mi_malloc_small(size_t si
 }
 
 // The main allocation function
-static inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept {
+inline void* _mi_heap_malloc_zero_ex(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept {
   if mi_likely(size <= MI_SMALL_SIZE_MAX) {
+    mi_assert_internal(huge_alignment == 0);
     return mi_heap_malloc_small_zero(heap, size, zero);
   }
   else {
@@ -469,8 +470,8 @@ static inline mi_segment_t* mi_checked_ptr_segment(const void* p, const char* ms
   }
 #endif
 
+  if mi_unlikely(p == NULL) return NULL;
   mi_segment_t* const segment = _mi_ptr_segment(p);
-  if mi_unlikely(segment == NULL) return NULL;  // checks also for (p==NULL)
 
 #if (MI_DEBUG>0)
   if mi_unlikely(!mi_is_in_heap_region(p)) {
