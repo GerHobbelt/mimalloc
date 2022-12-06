@@ -403,12 +403,14 @@ uint8_t* _mi_segment_page_start(const mi_segment_t* segment, const mi_page_t* pa
   if (page->segment_idx == 0 && block_size > 0 && segment->page_kind <= MI_PAGE_MEDIUM) {
     // for small and medium objects, ensure the page start is aligned with the block size (PR#66 by kickunderscore)
     size_t adjust = block_size - ((uintptr_t)p % block_size);
-    if (adjust < block_size) {
-      p += adjust;
-      psize -= adjust;
-      if (pre_size != NULL) *pre_size = adjust;
+    if (psize - adjust >= block_size) {
+      if (adjust < block_size) {      
+        p += adjust;
+        psize -= adjust;
+        if (pre_size != NULL) *pre_size = adjust;
+      }    
+      mi_assert_internal((uintptr_t)p % block_size == 0);
     }
-    mi_assert_internal((uintptr_t)p % block_size == 0);
   }
 
   if (page_size != NULL) *page_size = psize;
@@ -1315,9 +1317,7 @@ mi_page_t* _mi_segment_page_alloc(mi_heap_t* heap, size_t block_size, size_t pag
     mi_assert_internal(_mi_is_power_of_two(page_alignment));
     mi_assert_internal(page_alignment >= MI_SEGMENT_SIZE);
     //mi_assert_internal((MI_SEGMENT_SIZE % page_alignment) == 0);
-    if (page_alignment < MI_SEGMENT_SIZE) {
-      page_alignment = MI_SEGMENT_SIZE;      
-    }
+    if (page_alignment < MI_SEGMENT_SIZE) { page_alignment = MI_SEGMENT_SIZE; }
     page = mi_segment_huge_page_alloc(block_size, page_alignment, tld, os_tld);
   }
   else if (block_size <= MI_SMALL_OBJ_SIZE_MAX) {

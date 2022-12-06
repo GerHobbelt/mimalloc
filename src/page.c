@@ -648,6 +648,7 @@ static void mi_page_init(mi_heap_t* heap, mi_page_t* page, size_t block_size, mi
   page->xblock_size = (block_size < MI_HUGE_BLOCK_SIZE ? (uint32_t)block_size : MI_HUGE_BLOCK_SIZE);
   mi_assert_internal(page_size / block_size < (1L<<16));
   page->reserved = (uint16_t)(page_size / block_size);
+  mi_assert_internal(page->reserved > 0);
   #ifdef MI_ENCODE_FREELIST
   page->keys[0] = _mi_heap_random_next(heap);
   page->keys[1] = _mi_heap_random_next(heap);
@@ -794,6 +795,7 @@ void mi_register_deferred_free(mi_deferred_free_fun* fn, void* arg) mi_attr_noex
 // Because huge pages contain just one block, and the segment contains
 // just that page, we always treat them as abandoned and any thread
 // that frees the block can free the whole page and segment directly.
+// Huge pages are also use if the requested alignment is very large (> MI_ALIGNMENT_MAX).
 static mi_page_t* mi_huge_page_alloc(mi_heap_t* heap, size_t size, size_t page_alignment) {
   size_t block_size = _mi_os_good_alloc_size(size);
   mi_assert_internal(mi_bin(block_size) == MI_BIN_HUGE || page_alignment > 0);
@@ -843,6 +845,8 @@ static mi_page_t* mi_find_page(mi_heap_t* heap, size_t size, size_t huge_alignme
 
 // Generic allocation routine if the fast path (`alloc.c:mi_page_malloc`) does not succeed.
 // Note: in debug mode the size includes MI_PADDING_SIZE and might have overflowed.
+// The `huge_alignment` is normally 0 but is set to a multiple of MI_SEGMENT_SIZE for 
+// very large requested alignments in which case we use a huge segment.
 void* _mi_malloc_generic(mi_heap_t* heap, size_t size, bool zero, size_t huge_alignment) mi_attr_noexcept
 {
   mi_assert_internal(heap != NULL);
