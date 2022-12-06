@@ -95,7 +95,7 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
   0,                // tid
   0,                // cookie
   { 0, 0 },         // keys
-  { {0}, {0}, 0 },
+  { {0}, {0}, 0, true }, // random
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next
@@ -127,7 +127,7 @@ mi_heap_t _mi_heap_main = {
   0,                // thread id
   0,                // initial cookie
   { 0, 0 },         // the key of the main heap can be fixed (unlike page keys that need to be secure!)
-  { {0x846ca68b}, {0}, 0 },  // random
+  { {0x846ca68b}, {0}, 0, true },  // random
   0,                // page count
   MI_BIN_FULL, 0,   // page retired min/max
   NULL,             // next heap
@@ -142,8 +142,13 @@ mi_stats_t _mi_stats_main = { MI_STATS_NULL };
 static void mi_heap_main_init(void) {
   if (_mi_heap_main.cookie == 0) {
     _mi_heap_main.thread_id = _mi_thread_id();
-    _mi_heap_main.cookie = _mi_os_random_weak((uintptr_t)&mi_heap_main_init);
-    _mi_random_init(&_mi_heap_main.random);
+    _mi_heap_main.cookie = 1;
+    #if defined(_WIN32) && !defined(MI_SHARED_LIB)
+      _mi_random_init_weak(&_mi_heap_main.random);    // prevent allocation failure during bcrypt dll initialization with static linking
+    #else
+      _mi_random_init(&_mi_heap_main.random);
+    #endif
+    _mi_heap_main.cookie  = _mi_heap_random_next(&_mi_heap_main);
     _mi_heap_main.keys[0] = _mi_heap_random_next(&_mi_heap_main);
     _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);
   }
@@ -502,12 +507,13 @@ static void mi_process_load(void) {
   MI_UNUSED(dummy);
   #endif
   os_preloading = false;
+  mi_assert_internal(_mi_is_main_thread());
   #if !(defined(_WIN32) && defined(MI_SHARED_LIB))  // use Dll process detach (see below) instead of atexit (issue #521)
   atexit(&mi_process_done);  
   #endif
   _mi_options_init();
-  mi_process_init();
-  //mi_stats_reset();-
+  mi_process_setup_auto_thread_done();
+  mi_process_init();  
   if (mi_redirected) _mi_verbose_message("malloc is redirected.\n");
 
   // show message from the redirector (if present)
@@ -516,6 +522,9 @@ static void mi_process_load(void) {
   if (msg != NULL && (mi_option_is_enabled(mi_option_verbose) || mi_option_is_enabled(mi_option_show_errors))) {
     _mi_fputs(NULL,NULL,NULL,msg);
   }
+
+  // reseed random
+  _mi_random_reinit_if_weak(&_mi_heap_main.random);
 }
 
 #if defined(_WIN32) && (defined(_M_IX86) || defined(_M_X64))
@@ -542,7 +551,6 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_process_is_initialized = true;
   mi_process_setup_auto_thread_done();
 
-  
   mi_detect_cpu_features();
   _mi_os_init();
   mi_heap_main_init();
