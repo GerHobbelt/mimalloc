@@ -74,17 +74,6 @@ static void* mi_align_up_ptr(void* p, size_t alignment) {
   return (void*)_mi_align_up((uintptr_t)p, alignment);
 }
 
-static inline uintptr_t _mi_align_down(uintptr_t sz, size_t alignment) {
-  mi_assert_internal(alignment != 0);
-  uintptr_t mask = alignment - 1;
-  if ((alignment & mask) == 0) { // power of two?
-    return (sz & ~mask);
-  }
-  else {
-    return ((sz / alignment) * alignment);
-  }
-}
-
 static void* mi_align_down_ptr(void* p, size_t alignment) {
   return (void*)_mi_align_down((uintptr_t)p, alignment);
 }
@@ -406,6 +395,9 @@ static bool mi_os_mem_free(void* addr, size_t size, bool was_committed, mi_stats
 -------------------------------------------------------------- */
 
 #ifdef _WIN32
+ 
+#define MEM_COMMIT_RESERVE  (MEM_COMMIT|MEM_RESERVE)
+
 static void* mi_win_virtual_allocx(void* addr, size_t size, size_t try_alignment, DWORD flags) {
 #if (MI_INTPTR_SIZE >= 8)
   // on 64-bit systems, try to use the virtual address area after 2TiB for 4MiB aligned allocations
@@ -590,6 +582,17 @@ static void* mi_unix_mmapx(void* addr, size_t size, size_t try_alignment, int pr
   return NULL;
 }
 
+static int mi_unix_mmap_fd(void) {
+#if defined(VM_MAKE_TAG)
+  // macOS: tracking anonymous page with a specific ID. (All up to 98 are taken officially but LLVM sanitizers had taken 99)
+  int os_tag = (int)mi_option_get(mi_option_os_tag);
+  if (os_tag < 100 || os_tag > 255) os_tag = 100;
+  return VM_MAKE_TAG(os_tag);
+#else
+  return -1;
+#endif
+}
+
 static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int protect_flags, bool large_only, bool allow_large, bool* is_large) {
   void* p = NULL;
   #if !defined(MAP_ANONYMOUS)
@@ -598,20 +601,14 @@ static void* mi_unix_mmap(void* addr, size_t size, size_t try_alignment, int pro
   #if !defined(MAP_NORESERVE)
   #define MAP_NORESERVE  0
   #endif
+  const int fd = mi_unix_mmap_fd();
   int flags = MAP_PRIVATE | MAP_ANONYMOUS;
-  int fd = -1;
   if (_mi_os_has_overcommit()) {
     flags |= MAP_NORESERVE;
   }
   #if defined(PROT_MAX)
   protect_flags |= PROT_MAX(PROT_READ | PROT_WRITE); // BSD
-  #endif
-  #if defined(VM_MAKE_TAG)
-  // macOS: tracking anonymous page with a specific ID. (All up to 98 are taken officially but LLVM sanitizers had taken 99)
-  int os_tag = (int)mi_option_get(mi_option_os_tag);
-  if (os_tag < 100 || os_tag > 255) { os_tag = 100; }
-  fd = VM_MAKE_TAG(os_tag);
-  #endif
+  #endif    
   // huge page allocation
   if ((large_only || use_large_os_page(size, try_alignment)) && allow_large) {
     static _Atomic(size_t) large_page_try_ok; // = 0;
@@ -1010,9 +1007,12 @@ bool _mi_os_decommit(void* addr, size_t size, mi_stats_t* tld_stats) {
   return mi_os_commitx(addr, size, false, true /* conservative */, &is_zero, stats);
 }
 
-bool _mi_os_commit_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* stats) {
-  return mi_os_commitx(addr, size, true, true /* conservative */, is_zero, stats);
+/*
+static bool mi_os_commit_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* stats) {  
+  return mi_os_commitx(addr, size, true, true // conservative
+                      , is_zero, stats);
 }
+*/
 
 // Signal to the OS that the address range is no longer in use
 // but may be used later again. This will release physical memory
@@ -1078,13 +1078,14 @@ bool _mi_os_reset(void* addr, size_t size, mi_stats_t* tld_stats) {
   return mi_os_resetx(addr, size, true, stats);
 }
 
+/*
 bool _mi_os_unreset(void* addr, size_t size, bool* is_zero, mi_stats_t* tld_stats) {
   MI_UNUSED(tld_stats);
   mi_stats_t* stats = &_mi_stats_main;
   *is_zero = false;
   return mi_os_resetx(addr, size, false, stats);
 }
-
+*/
 
 // Protect a region in memory to be not accessible.
 static  bool mi_os_protectx(void* addr, size_t size, bool protect) {

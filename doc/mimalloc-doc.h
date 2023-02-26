@@ -1080,7 +1080,7 @@ or via environment variables.
 - `MIMALLOC_PAGE_RESET=0`: by default, mimalloc will reset (or purge) OS pages when not in use to signal to the OS
    that the underlying physical memory can be reused. This can reduce memory fragmentation in long running (server)
    programs. By setting it to `0` no such page resets will be done which can improve performance for programs that are not long
-   running. As an alternative, the `MIMALLOC_RESET_DELAY=`<msecs> can be set higher (100ms by default) to make the page
+   running. As an alternative, the `MIMALLOC_DECOMMIT_DELAY=`<msecs> can be set higher (100ms by default) to make the page
    reset occur less frequently instead of turning it off completely.
 - `MIMALLOC_LARGE_OS_PAGES=1`: use large OS pages (2MiB) when available; for some workloads this can significantly
    improve performance. Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs

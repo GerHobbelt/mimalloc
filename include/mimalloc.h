@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 179   // major + 2 digits minor
+#define MI_MALLOC_VERSION 209   // major + 2 digits minor
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -97,6 +97,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <stddef.h>     // size_t
 #include <stdbool.h>    // bool
+#include <stdint.h>     // INTPTR_MAX
 
 #ifdef __cplusplus
 extern "C" {
@@ -274,6 +275,8 @@ mi_decl_export int mi_reserve_huge_os_pages_at(size_t pages, int numa_node, size
 mi_decl_export int  mi_reserve_os_memory(size_t size, bool commit, bool allow_large) mi_attr_noexcept;
 mi_decl_export bool mi_manage_os_memory(void* start, size_t size, bool is_committed, bool is_large, bool is_zero, int numa_node) mi_attr_noexcept;
 
+mi_decl_export void mi_debug_show_arenas(void) mi_attr_noexcept;
+
 // Experimental: heaps associated with specific memory arena's
 typedef int mi_arena_id_t;
 mi_decl_export void* mi_arena_area(mi_arena_id_t arena_id, size_t* size);
@@ -315,30 +318,34 @@ mi_decl_export int  mi_reserve_huge_os_pages(size_t pages, double max_secs, size
 
 typedef enum mi_option_e {
   // stable options
-  mi_option_show_errors,              // print error messages
-  mi_option_show_stats,               // print statistics on termination
-  mi_option_verbose,                  // print verbose messages
-  // the following options are experimental (see src/options.h)
+  mi_option_show_errors,
+  mi_option_show_stats,
+  mi_option_verbose,
+  // some of the following options are experimental
+  // (deprecated options are kept for binary backward compatibility with v1.x versions)
   mi_option_eager_commit,
-  mi_option_eager_region_commit,
-  mi_option_reset_decommits,
+  mi_option_deprecated_eager_region_commit,
+  mi_option_deprecated_reset_decommits,
   mi_option_large_os_pages,           // use large (2MiB) OS pages, implies eager commit
   mi_option_reserve_huge_os_pages,    // reserve N huge OS pages (1GiB) at startup
   mi_option_reserve_huge_os_pages_at, // reserve huge OS pages at a specific NUMA node
   mi_option_reserve_os_memory,        // reserve specified amount of OS memory at startup
   mi_option_deprecated_segment_cache,
   mi_option_page_reset,
-  mi_option_abandoned_page_reset,
-  mi_option_segment_reset,
+  mi_option_abandoned_page_decommit,
+  mi_option_deprecated_segment_reset,
   mi_option_eager_commit_delay,
-  mi_option_reset_delay,
+  mi_option_decommit_delay,
   mi_option_use_numa_nodes,           // 0 = use available numa nodes, otherwise use at most N nodes.
   mi_option_limit_os_alloc,           // 1 = do not use OS memory for allocation (but only reserved arenas)
   mi_option_os_tag,
   mi_option_max_errors,
   mi_option_max_warnings,
   mi_option_max_segment_reclaim,
-  mi_option_destroy_on_exit,
+  mi_option_allow_decommit,
+  mi_option_segment_decommit_delay,  
+  mi_option_decommit_extend_delay,
+  mi_option_destroy_on_exit,          
   _mi_option_last
 } mi_option_t;
 

@@ -115,17 +115,20 @@ static bool mi_heap_page_never_delayed_free(mi_heap_t* heap, mi_page_queue_t* pq
 static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 {
   if (heap==NULL || !mi_heap_is_initialized(heap)) return;
-  _mi_deferred_free(heap, collect >= MI_FORCE);
 
-  // note: never reclaim on collect but leave it to threads that need storage to reclaim
-  if (
-  #ifdef NDEBUG
+  const bool force = collect >= MI_FORCE;  
+  _mi_deferred_free(heap, force);
+
+  // note: never reclaim on collect but leave it to threads that need storage to reclaim 
+  const bool force_main = 
+    #ifdef NDEBUG
       collect == MI_FORCE
-  #else
+    #else
       collect >= MI_FORCE
-  #endif
-    && _mi_is_main_thread() && mi_heap_is_backing(heap) && !heap->no_reclaim)
-  {
+    #endif
+      && _mi_is_main_thread() && mi_heap_is_backing(heap) && !heap->no_reclaim;
+
+  if (force_main) {
     // the main thread is abandoned (end-of-program), try to reclaim all abandoned segments.
     // if all memory is freed by now, all segments should be freed.
     _mi_abandoned_reclaim_all(heap, &heap->tld->segments);
@@ -141,20 +144,28 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
   _mi_heap_delayed_free_all(heap);
 
   // collect retired pages
-  _mi_heap_collect_retired(heap, collect >= MI_FORCE);
+  _mi_heap_collect_retired(heap, force);
 
   // collect all pages owned by this thread
   mi_heap_visit_pages(heap, &mi_heap_page_collect, &collect, NULL);
   mi_assert_internal( collect != MI_ABANDON || mi_atomic_load_ptr_acquire(mi_block_t,&heap->thread_delayed_free) == NULL );
 
-  // collect segment caches
-  if (collect >= MI_FORCE) {
+  // collect abandoned segments (in particular, decommit expired parts of segments in the abandoned segment list)
+  // note: forced decommit can be quite expensive if many threads are created/destroyed so we do not force on abandonment
+  _mi_abandoned_collect(heap, collect == MI_FORCE /* force? */, &heap->tld->segments);
+
+  // collect segment local caches
+  if (force) {
     _mi_segment_thread_collect(&heap->tld->segments);
   }
 
+  // decommit in global segment caches
+  // note: forced decommit can be quite expensive if many threads are created/destroyed so we do not force on abandonment
+  _mi_segment_cache_collect( collect == MI_FORCE, &heap->tld->os);  
+
   // collect regions on program-exit (or shared library unload)
-  if (collect >= MI_FORCE && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
-    _mi_mem_collect(&heap->tld->os);
+  if (force && _mi_is_main_thread() && mi_heap_is_backing(heap)) {
+    //_mi_mem_collect(&heap->tld->os);
   }
 }
 
@@ -189,13 +200,14 @@ mi_heap_t* mi_heap_get_backing(void) {
   return bheap;
 }
 
-mi_decl_nodiscard mi_heap_t* mi_heap_new(void) {
+mi_decl_nodiscard mi_heap_t* mi_heap_new_in_arena( mi_arena_id_t arena_id ) {
   mi_heap_t* bheap = mi_heap_get_backing();
   mi_heap_t* heap = mi_heap_malloc_tp(bheap, mi_heap_t);  // todo: OS allocate in secure mode?
   if (heap==NULL) return NULL;
   _mi_memcpy_aligned(heap, &_mi_heap_empty, sizeof(mi_heap_t));
   heap->tld = bheap->tld;
   heap->thread_id = _mi_thread_id();
+  heap->arena_id = arena_id;
   _mi_random_split(&bheap->random, &heap->random);
   heap->cookie  = _mi_heap_random_next(heap) | 1;
   heap->keys[0] = _mi_heap_random_next(heap);
@@ -205,6 +217,14 @@ mi_decl_nodiscard mi_heap_t* mi_heap_new(void) {
   heap->next = heap->tld->heaps;
   heap->tld->heaps = heap;
   return heap;
+}
+
+mi_decl_nodiscard mi_heap_t* mi_heap_new(void) {
+  return mi_heap_new_in_arena(_mi_arena_id_none());
+}
+
+bool _mi_heap_memid_is_suitable(mi_heap_t* heap, size_t memid) {
+  return _mi_arena_memid_is_suitable(memid, heap->arena_id);
 }
 
 uintptr_t _mi_heap_random_next(mi_heap_t* heap) {
@@ -272,9 +292,9 @@ static bool _mi_heap_page_destroy(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_
 
   // stats
   const size_t bsize = mi_page_block_size(page);
-  if (bsize > MI_LARGE_OBJ_SIZE_MAX) {
-    if (bsize > MI_HUGE_OBJ_SIZE_MAX) {
-      mi_heap_stat_decrease(heap, giant, bsize);
+  if (bsize > MI_MEDIUM_OBJ_SIZE_MAX) {
+    if (bsize <= MI_LARGE_OBJ_SIZE_MAX) {
+      mi_heap_stat_decrease(heap, large, bsize);
     }
     else {
       mi_heap_stat_decrease(heap, huge, bsize);
