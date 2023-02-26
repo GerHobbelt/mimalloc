@@ -615,25 +615,6 @@ mi_decl_nodiscard size_t mi_usable_size(const void* p) mi_attr_noexcept {
 
 
 // ------------------------------------------------------
-// ensure explicit external inline definitions are emitted!
-// ------------------------------------------------------
-
-#ifdef __cplusplus
-void* _mi_externs[] = {
-  (void*)&_mi_page_malloc,
-  (void*)&_mi_heap_malloc_zero,
-  (void*)&_mi_heap_malloc_zero_ex,
-  (void*)&mi_malloc,
-  (void*)&mi_malloc_small,
-  (void*)&mi_zalloc_small,
-  (void*)&mi_heap_malloc,
-  (void*)&mi_heap_zalloc,
-  (void*)&mi_heap_malloc_small
-};
-#endif
-
-
-// ------------------------------------------------------
 // Allocation extensions
 // ------------------------------------------------------
 
@@ -781,7 +762,9 @@ mi_decl_nodiscard mi_decl_restrict char* mi_heap_strdup(mi_heap_t* heap, const c
   if (s == NULL) return NULL;
   size_t n = strlen(s);
   char* t = (char*)mi_heap_malloc(heap,n+1);
-  if (t != NULL) _mi_memcpy(t, s, n + 1);
+  if (t == NULL) return NULL;
+  _mi_memcpy(t, s, n);
+  t[n] = 0;
   return t;
 }
 
@@ -831,6 +814,7 @@ mi_decl_nodiscard mi_decl_restrict char* mi_heap_realpath(mi_heap_t* heap, const
   }
 }
 #else
+/*
 #include <unistd.h>  // pathconf
 static size_t mi_path_max(void) {
   static size_t path_max = 0;
@@ -842,20 +826,31 @@ static size_t mi_path_max(void) {
   }
   return path_max;
 }
-
+*/
 char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept {
   if (resolved_name != NULL) {
     return realpath(fname,resolved_name);
   }
   else {
-    size_t n  = mi_path_max();
+    char* rname = realpath(fname, NULL);
+    if (rname == NULL) return NULL;
+    char* result = mi_heap_strdup(heap, rname);
+    free(rname);  // use regular free! (which may be redirected to our free but that's ok)
+    return result;
+  }
+  /*
+    const size_t n  = mi_path_max();
     char* buf = (char*)mi_malloc(n+1);
-    if (buf==NULL) return NULL;
+    if (buf == NULL) {
+      errno = ENOMEM;
+      return NULL;
+    }
     char* rname  = realpath(fname,buf);
     char* result = mi_heap_strndup(heap,rname,n); // ok if `rname==NULL`
     mi_free(buf);
     return result;
   }
+  */
 }
 #endif
 
@@ -940,7 +935,7 @@ static mi_decl_noinline void* mi_try_new(size_t size, bool nothrow) {
 }
 
 
-mi_decl_nodiscard mi_decl_restrict inline void* mi_heap_alloc_new(mi_heap_t* heap, size_t size) {
+mi_decl_nodiscard mi_decl_restrict extern inline void* mi_heap_alloc_new(mi_heap_t* heap, size_t size) {
   void* p = mi_heap_malloc(heap,size);
   if mi_unlikely(p == NULL) return mi_heap_try_new(heap, size, false);
   return p;
@@ -951,7 +946,7 @@ mi_decl_nodiscard mi_decl_restrict void* mi_new(size_t size) {
 }
 
 
-mi_decl_nodiscard mi_decl_restrict inline void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size) {
+mi_decl_nodiscard mi_decl_restrict extern inline void* mi_heap_alloc_new_n(mi_heap_t* heap, size_t count, size_t size) {
   size_t total;
   if mi_unlikely(mi_count_size_overflow(count, size, &total)) {
     mi_try_new_handler(false);  // on overflow we invoke the try_new_handler once to potentially throw std::bad_alloc
@@ -1009,3 +1004,23 @@ mi_decl_nodiscard void* mi_new_reallocn(void* p, size_t newcount, size_t size) {
     return mi_new_realloc(p, total);
   }
 }
+
+// ------------------------------------------------------
+// ensure explicit external inline definitions are emitted!
+// ------------------------------------------------------
+
+#ifdef __cplusplus
+void* _mi_externs[] = {
+  (void*)&_mi_page_malloc,
+  (void*)&_mi_heap_malloc_zero,
+  (void*)&_mi_heap_malloc_zero_ex,
+  (void*)&mi_malloc,
+  (void*)&mi_malloc_small,
+  (void*)&mi_zalloc_small,
+  (void*)&mi_heap_malloc,
+  (void*)&mi_heap_zalloc,
+  (void*)&mi_heap_malloc_small,
+  (void*)&mi_heap_alloc_new,
+  (void*)&mi_heap_alloc_new_n
+};
+#endif
