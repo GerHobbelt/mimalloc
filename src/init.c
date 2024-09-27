@@ -146,7 +146,9 @@ mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
 }
 
 // the thread-local default heap for allocation
+#if !((defined(MI_MALLOC_OVERRIDE_TLS_SUPPORT) || defined(MI_MALLOC_OVERRIDE)) && defined(__APPLE__))
 mi_decl_thread mi_heap_t* _mi_heap_default = (mi_heap_t*)&_mi_heap_empty;
+#endif
 
 extern mi_heap_t _mi_heap_main;
 
@@ -527,8 +529,10 @@ void mi_process_load(void) mi_attr_noexcept {
     return;
   mi_heap_main_init();
   #if defined(__APPLE__) || defined(MI_TLS_RECURSE_GUARD)
-  volatile mi_heap_t* dummy = _mi_heap_default; // access TLS to allocate it before setting tls_initialized to true;
+  #if !((defined(MI_MALLOC_OVERRIDE_TLS_SUPPORT) || defined(MI_MALLOC_OVERRIDE)) && defined(__APPLE__))
+	volatile mi_heap_t* dummy = _mi_heap_default; // access TLS to allocate it before setting tls_initialized to true;
   if (dummy == NULL) return;                    // use dummy or otherwise the access may get optimized away (issue #697)
+	#endif
   #endif
   os_preloading = false;
   mi_assert_internal(_mi_is_main_thread());

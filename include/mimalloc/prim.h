@@ -221,7 +221,9 @@ static inline void mi_prim_tls_slot_set(size_t slot, void* value) mi_attr_noexce
 
 
 // defined in `init.c`; do not use these directly
+#if !((defined(MI_MALLOC_OVERRIDE_TLS_SUPPORT) || defined(MI_MALLOC_OVERRIDE)) && defined(__APPLE__))
 extern mi_decl_thread mi_heap_t* _mi_heap_default;  // default heap to allocate from
+#endif
 extern bool _mi_process_is_initialized;             // has mi_process_init been called?
 
 static inline mi_threadid_t _mi_prim_thread_id(void) mi_attr_noexcept;
@@ -296,7 +298,7 @@ We try to circumvent this in an efficient way:
 
 static inline mi_heap_t* mi_prim_get_default_heap(void);
 
-#if defined(MI_MALLOC_OVERRIDE)
+#if defined(MI_MALLOC_OVERRIDE) || defined(MI_MALLOC_OVERRIDE_TLS_SUPPORT)
 #if defined(__APPLE__) // macOS
   #define MI_TLS_SLOT               89  // seems unused?
   // other possible unused ones are 9, 29, __PTK_FRAMEWORK_JAVASCRIPTCORE_KEY4 (94), __PTK_FRAMEWORK_GC_KEY9 (112) and __PTK_FRAMEWORK_OLDGC_KEY9 (89)
