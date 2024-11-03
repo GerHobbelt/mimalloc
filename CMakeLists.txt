@@ -34,6 +34,7 @@ option(MI_NO_THP            "Disable transparent huge pages support on Linux/And
 option(MI_EXTRA_CPPDEFS     "Extra pre-processor definitions (use as `-DMI_EXTRA_CPPDEFS=\"opt1=val1;opt2=val2\"`)" "")
 
 # deprecated options
+option(MI_WIN_USE_FLS       "Use Fiber local storage on Windows to detect thread termination" OFF)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
 option(MI_USE_LIBATOMIC     "Explicitly link with -latomic (on older systems) (deprecated and detected automatically)" OFF)
 
@@ -64,7 +65,12 @@ set(mi_cflags "")
 set(mi_cflags_static "")            # extra flags for a static library build
 set(mi_cflags_dynamic "")           # extra flags for a shared-object library build
 set(mi_libraries "")
-set(mi_defines ${MI_EXTRA_CPPDEFS})
+
+if(MI_EXTRA_CPPDEFS)
+ set(mi_defines ${MI_EXTRA_CPPDEFS})
+else()
+ set(mi_defines "")
+endif()
 
 # -----------------------------------------------------------------------------
 # Convenience: set default build type depending on the build directory
@@ -306,6 +312,11 @@ endif()
 if(MI_LIBC_MUSL)
   message(STATUS "Assume using musl libc (MI_LIBC_MUSL=ON)")
   list(APPEND mi_defines MI_LIBC_MUSL=1)
+endif()
+
+if(MI_WIN_USE_FLS)
+  message(STATUS "Use the Fiber API to detect thread termination")
+  list(APPEND mi_defines MI_WIN_USE_FLS=1)
 endif()
 
 # On Haiku use `-DCMAKE_INSTALL_PREFIX` instead, issue #788
