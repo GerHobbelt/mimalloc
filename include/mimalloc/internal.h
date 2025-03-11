@@ -10,7 +10,7 @@ terms of the MIT license. A copy of the license can be found in the file
 
 
 // --------------------------------------------------------------------------
-// This file contains the interal API's of mimalloc and various utility
+// This file contains the internal API's of mimalloc and various utility
 // functions and macros.
 // --------------------------------------------------------------------------
 
@@ -38,6 +38,12 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_cache_align     __attribute__((aligned(MI_CACHE_LINE)))
 #define mi_decl_weak            __attribute__((weak))
 #define mi_decl_hidden          __attribute__((visibility("hidden")))
+#elif __cplusplus >= 201103L    // c++11
+#define mi_decl_noinline
+#define mi_decl_thread          thread_local
+#define mi_decl_cache_align     alignas(MI_CACHE_LINE)
+#define mi_decl_weak
+#define mi_decl_hidden
 #else
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
@@ -58,8 +64,8 @@ terms of the MIT license. A copy of the license can be found in the file
 
 // "libc.c"
 #include    <stdarg.h>
-void        _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args);
-void        _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...);
+int         _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args);
+int         _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...);
 char        _mi_toupper(char c);
 int         _mi_strnicmp(const char* s, const char* t, size_t n);
 void        _mi_strlcpy(char* dest, const char* src, size_t dest_size);
@@ -216,7 +222,7 @@ void        _mi_heap_destroy_pages(mi_heap_t* heap);
 void        _mi_heap_collect_abandon(mi_heap_t* heap);
 void        _mi_heap_set_default_direct(mi_heap_t* heap);
 bool        _mi_heap_memid_is_suitable(mi_heap_t* heap, mi_memid_t memid);
-void        _mi_heap_unsafe_destroy_all(void);
+void        _mi_heap_unsafe_destroy_all(mi_heap_t* heap);
 mi_heap_t*  _mi_heap_by_tag(mi_heap_t* heap, uint8_t tag);
 void        _mi_heap_area_init(mi_heap_area_t* area, mi_page_t* page);
 bool        _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_block_visit_fun* visitor, void* arg);

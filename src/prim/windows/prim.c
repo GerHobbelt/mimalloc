@@ -50,7 +50,7 @@ typedef NTSTATUS (__stdcall *PNtAllocateVirtualMemoryEx)(HANDLE, PVOID*, SIZE_T*
 static PVirtualAlloc2 pVirtualAlloc2 = NULL;
 static PNtAllocateVirtualMemoryEx pNtAllocateVirtualMemoryEx = NULL;
 
-// Similarly, GetNumaProcesorNodeEx is only supported since Windows 7
+// Similarly, GetNumaProcessorNodeEx is only supported since Windows 7
 typedef struct MI_PROCESSOR_NUMBER_S { WORD Group; BYTE Number; BYTE Reserved; } MI_PROCESSOR_NUMBER;
 
 typedef VOID (__stdcall *PGetCurrentProcessorNumberEx)(MI_PROCESSOR_NUMBER* ProcNumber);
@@ -127,7 +127,7 @@ void _mi_prim_mem_init( mi_os_mem_config_t* config )
   ULONGLONG memInKiB = 0;
   if (GetPhysicallyInstalledSystemMemory(&memInKiB)) {
     if (memInKiB > 0 && memInKiB < (SIZE_MAX / MI_KiB)) {
-      config->physical_memory = memInKiB * MI_KiB;
+      config->physical_memory = (size_t)memInKiB * MI_KiB;
     }
   }
   // get the VirtualAlloc2 function
@@ -173,7 +173,7 @@ int _mi_prim_free(void* addr, size_t size ) {
     // In mi_os_mem_alloc_aligned the fallback path may have returned a pointer inside
     // the memory region returned by VirtualAlloc; in that case we need to free using
     // the start of the region.
-    MEMORY_BASIC_INFORMATION info = { 0 };
+    MEMORY_BASIC_INFORMATION info; _mi_memzero_var(info);
     VirtualQuery(addr, &info, sizeof(info));
     if (info.AllocationBase < addr && ((uint8_t*)addr - (uint8_t*)info.AllocationBase) < (ptrdiff_t)MI_SEGMENT_SIZE) {
       errcode = 0;

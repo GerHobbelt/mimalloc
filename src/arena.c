@@ -286,7 +286,7 @@ static mi_decl_noinline void* mi_arena_try_alloc_at(mi_arena_t* arena, size_t ar
   return p;
 }
 
-// allocate in a speficic arena
+// allocate in a specific arena
 static void* mi_arena_try_alloc_at_id(mi_arena_id_t arena_id, bool match_numa_node, int numa_node, size_t size, size_t alignment,
                                        bool commit, bool allow_large, mi_arena_id_t req_arena_id, mi_memid_t* memid )
 {
@@ -603,7 +603,7 @@ static void mi_arenas_try_purge( bool force, bool visit_all )
 
   // check if any arena needs purging?
   const mi_msecs_t now = _mi_clock_now();
-  mi_msecs_t arenas_expire = mi_atomic_load_acquire(&mi_arenas_purge_expire);
+  mi_msecs_t arenas_expire = mi_atomic_loadi64_acquire(&mi_arenas_purge_expire);
   if (!force && (arenas_expire == 0 || arenas_expire < now)) return;
 
   const size_t max_arena = mi_atomic_load_acquire(&mi_arena_count);
@@ -614,7 +614,7 @@ static void mi_arenas_try_purge( bool force, bool visit_all )
   mi_atomic_guard(&purge_guard)
   {
     // increase global expire: at most one purge per delay cycle
-    mi_atomic_store_release(&mi_arenas_purge_expire, now + mi_arena_purge_delay());  
+    mi_atomic_storei64_release(&mi_arenas_purge_expire, now + mi_arena_purge_delay());  
     size_t max_purge_count = (visit_all ? max_arena : 2);
     bool all_visited = true;
     for (size_t i = 0; i < max_arena; i++) {
@@ -631,7 +631,7 @@ static void mi_arenas_try_purge( bool force, bool visit_all )
     }
     if (all_visited) {
       // all arena's were visited and purged: reset global expire
-      mi_atomic_store_release(&mi_arenas_purge_expire, 0);
+      mi_atomic_storei64_release(&mi_arenas_purge_expire, 0);
     }
   }
 }
@@ -795,10 +795,22 @@ static bool mi_arena_add(mi_arena_t* arena, mi_arena_id_t* arena_id, mi_stats_t*
 static bool mi_manage_os_memory_ex2(void* start, size_t size, bool is_large, int numa_node, bool exclusive, mi_memid_t memid, mi_arena_id_t* arena_id) mi_attr_noexcept
 {
   if (arena_id != NULL) *arena_id = _mi_arena_id_none();
-  if (size < MI_ARENA_BLOCK_SIZE) return false;
-
+  if (size < MI_ARENA_BLOCK_SIZE) {
+    _mi_warning_message("the arena size is too small (memory at %p with size %zu)\n", start, size);
+    return false;
+  }
   if (is_large) {
     mi_assert_internal(memid.initially_committed && memid.is_pinned);
+  }
+  if (!_mi_is_aligned(start, MI_SEGMENT_ALIGN)) {
+    void* const aligned_start = mi_align_up_ptr(start, MI_SEGMENT_ALIGN);
+    const size_t diff = (uint8_t*)aligned_start - (uint8_t*)start;
+    if (diff >= size || (size - diff) < MI_ARENA_BLOCK_SIZE) {
+      _mi_warning_message("after alignment, the size of the arena becomes too small (memory at %p with size %zu)\n", start, size);
+      return false;
+    }
+    start = aligned_start;
+    size = size - diff;
   }
 
   const size_t bcount = size / MI_ARENA_BLOCK_SIZE;
@@ -911,7 +923,8 @@ static size_t mi_debug_show_bitmap(const char* prefix, const char* header, size_
   return inuse_count;
 }
 
-void mi_debug_show_arenas(bool show_inuse) mi_attr_noexcept {
+void mi_debug_show_arenas(void) mi_attr_noexcept {
+  const bool show_inuse = true;
   size_t max_arenas = mi_atomic_load_relaxed(&mi_arena_count);
   size_t inuse_total = 0;
   //size_t abandoned_total = 0;
@@ -1005,5 +1018,3 @@ int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserv
   if (err==0 && pages_reserved!=NULL) *pages_reserved = pages;
   return err;
 }
-
-

@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------------
-Copyright (c) 2018-2021, Microsoft Research, Daan Leijen
+Copyright (c) 2018-2025, Microsoft Research, Daan Leijen
 This is free software; you can redistribute it and/or modify it under the
 terms of the MIT license. A copy of the license can be found in the file
 "LICENSE" at the root of this distribution.
@@ -589,7 +589,7 @@ void mi_subproc_add_current_thread(mi_subproc_id_t subproc);
 
 /// Allocate \a size bytes aligned by \a alignment.
 /// @param size  number of bytes to allocate.
-/// @param alignment  the minimal alignment of the allocated memory.       
+/// @param alignment  the minimal alignment of the allocated memory.
 /// @returns pointer to the allocated memory or \a NULL if out of memory,
 /// or if the alignment is not a power of 2 (including 0). The \a size is unrestricted
 /// (and does not have to be an integral multiple of the \a alignment).
@@ -883,7 +883,7 @@ typedef bool (mi_block_visit_fun)(const mi_heap_t* heap, const mi_heap_area_t* a
 bool mi_heap_visit_blocks(const mi_heap_t* heap, bool visit_all_blocks, mi_block_visit_fun* visitor, void* arg);
 
 /// @brief Visit all areas and blocks in abandoned heaps.
-/// @param subproc_id The sub-process id associated with the abandonded heaps.
+/// @param subproc_id The sub-process id associated with the abandoned heaps.
 /// @param heap_tag Visit only abandoned memory with the specified heap tag, use -1 to visit all abandoned memory.
 /// @param visit_blocks If \a true visits all allocated blocks, otherwise
 ///                         \a visitor is only called for every heap area.
@@ -1139,7 +1139,7 @@ to link with the static library. See `test\CMakeLists.txt` for an example.
 
 ### C++
 For best performance in C++ programs, it is also recommended to override the
-global `new` and `delete` operators. For convience, mimalloc provides
+global `new` and `delete` operators. For convenience, mimalloc provides
 [`mimalloc-new-delete.h`](https://github.com/microsoft/mimalloc/blob/master/include/mimalloc-new-delete.h) which does this for you -- just include it in a single(!) source file in your project.
 
 In C++, mimalloc also provides the `mi_stl_allocator` struct which implements the `std::allocator`
@@ -1231,8 +1231,9 @@ Further options for large workloads and services:
    the actual NUMA nodes is fine and will only cause threads to potentially allocate more memory across actual NUMA
    nodes (but this can happen in any case as NUMA local allocation is always a best effort but not guaranteed).
 - `MIMALLOC_ALLOW_LARGE_OS_PAGES=1`: use large OS pages (2 or 4MiB) when available; for some workloads this can significantly
-   improve performance. When this option is disabled, it also disables transparent huge pages (THP) for the process
-   (on Linux and Android). Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
+   improve performance. When this option is disabled (default), it also disables transparent huge pages (THP) for the process
+   (on Linux and Android). On Linux the default setting is 2 -- this enables the use of large pages through THP only.
+   Use `MIMALLOC_VERBOSE` to check if the large OS pages are enabled -- usually one needs
    to explicitly give permissions for large OS pages (as on [Windows][windows-huge] and [Linux][linux-huge]). However, sometimes
    the OS is very slow to reserve contiguous physical memory for large OS pages so use with care on systems that
    can have fragmented memory (for that reason, we generally recommend to use `MIMALLOC_RESERVE_HUGE_OS_PAGES` instead whenever possible).
@@ -1303,25 +1304,31 @@ the [shell](https://stackoverflow.com/questions/43941322/dyld-insert-libraries-i
 
 ### Dynamic Override on Windows
 
-<span id="override_on_windows">Dynamically overriding on mimalloc on Windows</span>
-is robust and has the particular advantage to be able to redirect all malloc/free calls that go through
-the (dynamic) C runtime allocator, including those from other DLL's or libraries.
-As it intercepts all allocation calls on a low level, it can be used reliably
+<span id="override_on_windows">Dynamically overriding on mimalloc on Windows</span> 
+is robust and has the particular advantage to be able to redirect all malloc/free calls 
+that go through the (dynamic) C runtime allocator, including those from other DLL's or 
+libraries. As it intercepts all allocation calls on a low level, it can be used reliably 
 on large programs that include other 3rd party components.
-There are four requirements to make the overriding work robustly:
+There are four requirements to make the overriding work well:
 
 1. Use the C-runtime library as a DLL (using the `/MD` or `/MDd` switch).
-2. Link your program explicitly with `mimalloc-override.dll` library.
-   To ensure the `mimalloc-override.dll` is loaded at run-time it is easiest to insert some
-    call to the mimalloc API in the `main` function, like `mi_version()`
-    (or use the `/INCLUDE:mi_version` switch on the linker). See the `mimalloc-override-test` project
-    for an example on how to use this.
-3. The [`mimalloc-redirect.dll`](bin) (or `mimalloc-redirect32.dll`) must be put
-   in the same folder as the main `mimalloc-override.dll` at runtime (as it is a dependency of that DLL).
-   The redirection DLL ensures that all calls to the C runtime malloc API get redirected to
-   mimalloc functions (which reside in `mimalloc-override.dll`).
-4. Ensure the `mimalloc-override.dll` comes as early as possible in the import
+
+2. Link your program explicitly with the `mimalloc.lib` export library for the `mimalloc.dll`.
+   (which must be compiled with `-DMI_OVERRIDE=ON`, which is the default though).
+   To ensure the `mimalloc.dll` is actually loaded at run-time it is easiest 
+   to insert some call to the mimalloc API in the `main` function, like `mi_version()`
+   (or use the `/include:mi_version` switch on the linker command, or
+   similarly, `#pragma comment(linker, "/include:mi_version")` in some source file). 
+   See the `mimalloc-test-override` project for an example on how to use this. 
+
+3. The `mimalloc-redirect.dll` must be put in the same directory as the main 
+   `mimalloc.dll` at runtime (as it is a dependency of that DLL).
+   The redirection DLL ensures that all calls to the C runtime malloc API get 
+   redirected to mimalloc functions (which reside in `mimalloc.dll`).
+
+4. Ensure the `mimalloc.dll` comes as early as possible in the import
    list of the final executable (so it can intercept all potential allocations).
+   You can use `minject -l <exe>` to check this if needed.
 
 For best performance on Windows with C++, it
 is also recommended to also override the `new`/`delete` operations (by including
@@ -1329,15 +1336,14 @@ is also recommended to also override the `new`/`delete` operations (by including
 a single(!) source file in your project).
 
 The environment variable `MIMALLOC_DISABLE_REDIRECT=1` can be used to disable dynamic
-overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully redirected.
+overriding at run-time. Use `MIMALLOC_VERBOSE=1` to check if mimalloc was successfully 
+redirected.
 
-We cannot always re-link an executable with `mimalloc-override.dll`, and similarly, we cannot always
-ensure the the DLL comes first in the import table of the final executable.
-In many cases though we can patch existing executables without any recompilation
-if they are linked with the dynamic C runtime (`ucrtbase.dll`) -- just put the `mimalloc-override.dll`
-into the import table (and put `mimalloc-redirect.dll` in the same folder)
-Such patching can be done for example with [CFF Explorer](https://ntcore.com/?page_id=388) or
-the [`minject`](bin) program.
+For different platforms than x64, you may need a specific [redirection dll](bin).
+Furthermore, we cannot always re-link an executable or ensure `mimalloc.dll` comes
+first in the import table. In such cases the [`minject`](bin) tool can be used
+to patch the executable's import tables.
+
 
 ## Static override
 
