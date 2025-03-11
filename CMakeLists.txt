@@ -35,6 +35,10 @@ option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead
 option(MI_NO_THP            "Disable transparent huge pages support on Linux/Android for the mimalloc process only" OFF)
 option(MI_EXTRA_CPPDEFS     "Extra pre-processor definitions (use as `-DMI_EXTRA_CPPDEFS=\"opt1=val1;opt2=val2\"`)" "")
 
+# negated options for vcpkg features
+option(MI_NO_USE_CXX        "Use plain C compilation (has priority over MI_USE_CXX)" OFF)
+option(MI_NO_OPT_ARCH       "Do not use architecture specific optimizations (like '-march=armv8.1-a' for example) (has priority over MI_OPT_ARCH)" OFF)
+
 # deprecated options
 option(MI_WIN_USE_FLS       "Use Fiber local storage on Windows to detect thread termination (deprecated)" OFF)
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
@@ -120,6 +124,15 @@ endif()
 if(CMAKE_C_COMPILER_ID MATCHES "Intel")
     list(APPEND mi_cflags -Wall)
 endif()
+
+# negative overrides (mainly to support vcpkg features)
+if(MI_NO_USE_CXX)
+  set(MI_USE_CXX "OFF")
+endif()
+if(MI_NO_OPT_ARCH)
+  set(MI_OPT_ARCH "OFF")
+endif()
+
 
 if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel")
   set(MI_USE_CXX "ON")
@@ -344,9 +357,9 @@ set(MI_OPT_ARCH_FLAGS "")
 set(MI_ARCH "unknown")
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86|i[3456]86)$" OR CMAKE_GENERATOR_PLATFORM MATCHES "^(x86|Win32)$")
   set(MI_ARCH "x86")
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|x64|amd64|AMD64)$" OR CMAKE_GENERATOR_PLATFORM STREQUAL "x64") # must be before arm64
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|x64|amd64|AMD64)$" OR CMAKE_GENERATOR_PLATFORM STREQUAL "x64" OR CMAKE_OSX_ARCHITECTURES STREQUAL "x86_64") # must be before arm64
   set(MI_ARCH "x64")
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|armv8.?|ARM64)$" OR CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|armv8.?|ARM64)$" OR CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64" OR CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
   set(MI_ARCH "arm64")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm|armv[34567]|ARM)$")
   set(MI_ARCH "arm32")
@@ -412,8 +425,13 @@ endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM_NAME MATCHES "Haiku")
   if(MI_OPT_ARCH)
-    if(MI_ARCH STREQUAL "arm64")
-      set(MI_OPT_ARCH_FLAGS "-march=armv8.1-a")         # fast atomics
+    if(APPLE AND CMAKE_C_COMPILER_ID STREQUAL "AppleClang" AND CMAKE_OSX_ARCHITECTURES)   # to support multi-arch binaries (#999)
+      set(MI_OPT_ARCH_FLAGS "")
+      if("arm64" IN_LIST CMAKE_OSX_ARCHITECTURES)
+        list(APPEND MI_OPT_ARCH_FLAGS "-Xarch_arm64;-march=armv8.1-a")
+      endif()
+    elseif(MI_ARCH STREQUAL "arm64")
+      set(MI_OPT_ARCH_FLAGS "-march=armv8.1-a")  # fast atomics
     endif()
   endif()
 endif()
@@ -555,10 +573,13 @@ if(MI_BUILD_SHARED)
   install(EXPORT mimalloc DESTINATION ${mi_install_cmakedir})
 
   if(WIN32)
-    # On windows, the import library name for the dll would clash with the static mimalloc.lib
-    # so we postfix the dll import library with `.dll.lib`.
+    # On windows, the import library name for the dll would clash with the static mimalloc.lib library
+    # so we postfix the dll import library with `.dll.lib` (and also the .pdb debug file)
     set_property(TARGET mimalloc PROPERTY ARCHIVE_OUTPUT_NAME "${mi_libname}.dll" )
     install(FILES "$<TARGET_FILE_DIR:mimalloc>/${mi_libname}.dll.lib" DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    set_property(TARGET mimalloc PROPERTY PDB_NAME "${mi_libname}.dll")
+    # don't try to install the pdb since it may not be generated depending on the configuration
+    # install(FILES "$<TARGET_FILE_DIR:mimalloc>/${mi_libname}.dll.pdb" DESTINATION ${CMAKE_INSTALL_LIBDIR})
   endif()
   if(WIN32 AND MI_WIN_REDIRECT)
     # On windows, link and copy the mimalloc redirection dll too.
@@ -621,7 +642,7 @@ if (MI_BUILD_OBJECT)
   )
 
   # Copy the generated object file (`static.o`) to the output directory (as `mimalloc.o`)
-  if(WIN32)
+  if(CMAKE_GENERATOR MATCHES "^Visual Studio.*$")
     set(mimalloc-obj-static "${CMAKE_CURRENT_BINARY_DIR}/mimalloc-obj.dir/$<CONFIG>/static${CMAKE_C_OUTPUT_EXTENSION}")
   else()
     set(mimalloc-obj-static "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/mimalloc-obj.dir/src/static.c${CMAKE_C_OUTPUT_EXTENSION}")
@@ -669,15 +690,41 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/mimalloc.pc"
 if (MI_BUILD_TESTS)
   enable_testing()
 
+  # static link tests
   foreach(TEST_NAME api api-fill stress)
     add_executable(mimalloc-test-${TEST_NAME} test/test-${TEST_NAME}.c)
     target_compile_definitions(mimalloc-test-${TEST_NAME} PRIVATE ${mi_defines})
     target_compile_options(mimalloc-test-${TEST_NAME} PRIVATE ${mi_cflags})
     target_include_directories(mimalloc-test-${TEST_NAME} PRIVATE include)
-    target_link_libraries(mimalloc-test-${TEST_NAME} PRIVATE mimalloc ${mi_libraries})
-
+    if(MI_BUILD_SHARED AND (MI_TRACK_ASAN OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN))
+      target_link_libraries(mimalloc-test-${TEST_NAME} PRIVATE mimalloc ${mi_libraries})
+    else()
+      target_link_libraries(mimalloc-test-${TEST_NAME} PRIVATE mimalloc-static ${mi_libraries})
+    endif()
     add_test(NAME test-${TEST_NAME} COMMAND mimalloc-test-${TEST_NAME})
   endforeach()
+
+  # dynamic override test
+  if(MI_BUILD_SHARED AND NOT (MI_TRACK_ASAN OR MI_DEBUG_TSAN OR MI_DEBUG_UBSAN))
+    add_executable(mimalloc-test-stress-dynamic test/test-stress.c)
+    target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE ${mi_defines} "USE_STD_MALLOC=1")
+    if(WIN32)
+      target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE "MI_LINK_VERSION=1")
+    endif()
+    target_compile_options(mimalloc-test-stress-dynamic PRIVATE ${mi_cflags})
+    target_include_directories(mimalloc-test-stress-dynamic PRIVATE include)
+    target_link_libraries(mimalloc-test-stress-dynamic PRIVATE mimalloc ${mi_libraries})  # mi_version
+    if(WIN32)
+      add_test(NAME test-stress-dynamic COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_SHOW_STATS=1 $<TARGET_FILE:mimalloc-test-stress-dynamic>)
+    else()
+      if(APPLE)
+        set(LD_PRELOAD "DYLD_INSERT_LIBRARIES")
+      else()
+        set(LD_PRELOAD "LD_PRELOAD")
+      endif()
+      add_test(NAME test-stress-dynamic COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_SHOW_STATS=1 ${LD_PRELOAD}=$<TARGET_FILE:mimalloc> $<TARGET_FILE:mimalloc-test-stress-dynamic>)
+    endif()
+  endif()
 endif()
 
 # -----------------------------------------------------------------------------
