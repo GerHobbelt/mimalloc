@@ -181,7 +181,7 @@ static void mi_os_prim_free(void* addr, size_t size, size_t commit_size) {
 void _mi_os_free_ex(void* addr, size_t size, bool still_committed, mi_memid_t memid) {
   if (mi_memkind_is_os(memid.memkind)) {
     size_t csize = memid.mem.os.size;
-    if (csize==0) { _mi_os_good_alloc_size(size); }
+    if (csize==0) { csize = _mi_os_good_alloc_size(size); }
     size_t commit_size = (still_committed ? csize : 0);
     void* base = addr;
     // different base? (due to alignment)
@@ -300,7 +300,10 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
 
       // explicitly commit only the aligned part
       if (commit) {
-        _mi_os_commit(p, size, NULL);
+        if (!_mi_os_commit(p, size, NULL)) {
+          mi_os_prim_free(p, over_size, 0);
+          return NULL;
+        }
       }
     }
     else  { // mmap can free inside an allocation
@@ -339,7 +342,7 @@ void* _mi_os_alloc(size_t size, mi_memid_t* memid) {
   bool os_is_zero  = false;
   void* p = mi_os_prim_alloc(size, 0, true, false, &os_is_large, &os_is_zero);
   if (p != NULL) {
-    *memid = _mi_memid_create_os(true, os_is_zero, os_is_large);
+    *memid = _mi_memid_create_os(p, size, true, os_is_zero, os_is_large);
   }
   return p;
 }
@@ -357,10 +360,9 @@ void* _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allo
   void* os_base = NULL;
   void* p = mi_os_prim_alloc_aligned(size, alignment, commit, allow_large, &os_is_large, &os_is_zero, &os_base );
   if (p != NULL) {
-    *memid = _mi_memid_create_os(commit, os_is_zero, os_is_large);
+    *memid = _mi_memid_create_os(p, size, commit, os_is_zero, os_is_large);
     memid->mem.os.base = os_base;
-    // memid->mem.os.alignment = alignment;
-    memid->mem.os.size += ((uint8_t*)p - (uint8_t*)os_base);  // todo: return from prim_alloc_aligned
+    memid->mem.os.size += ((uint8_t*)p - (uint8_t*)os_base);  // todo: return from prim_alloc_aligned?
   }
   return p;
 }
@@ -618,7 +620,7 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_mse
   if (psize != NULL) *psize = 0;
   if (pages_reserved != NULL) *pages_reserved = 0;
   size_t size = 0;
-  uint8_t* start = mi_os_claim_huge_pages(pages, &size);
+  uint8_t* const start = mi_os_claim_huge_pages(pages, &size);
   if (start == NULL) return NULL; // or 32-bit systems
 
   // Allocate one page at the time but try to place them contiguously
@@ -674,7 +676,7 @@ void* _mi_os_alloc_huge_os_pages(size_t pages, int numa_node, mi_msecs_t max_mse
   if (psize != NULL) { *psize = page * MI_HUGE_OS_PAGE_SIZE; }
   if (page != 0) {
     mi_assert(start != NULL);
-    *memid = _mi_memid_create_os(true /* is committed */, all_zero, true /* is_large */);
+    *memid = _mi_memid_create_os(start, size, true /* is committed */, all_zero, true /* is_large */);
     memid->memkind = MI_MEM_OS_HUGE;
     mi_assert(memid->is_pinned);
     #ifdef MI_TRACK_ASAN

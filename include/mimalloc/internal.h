@@ -126,13 +126,13 @@ bool        _mi_os_has_overcommit(void);
 bool        _mi_os_has_virtual_reserve(void);
 
 bool        _mi_os_reset(void* addr, size_t size);
-bool        _mi_os_commit(void* p, size_t size, bool* is_zero);
-bool        _mi_os_commit_ex(void* addr, size_t size, bool* is_zero, size_t stat_size);
 bool        _mi_os_decommit(void* addr, size_t size);
-bool        _mi_os_protect(void* addr, size_t size);
 bool        _mi_os_unprotect(void* addr, size_t size);
 bool        _mi_os_purge(void* p, size_t size);
 bool        _mi_os_purge_ex(void* p, size_t size, bool allow_reset, size_t stat_size);
+mi_decl_nodiscard bool _mi_os_commit(void* p, size_t size, bool* is_zero);
+mi_decl_nodiscard bool _mi_os_commit_ex(void* addr, size_t size, bool* is_zero, size_t stat_size);
+mi_decl_nodiscard bool _mi_os_protect(void* addr, size_t size);
 
 void*       _mi_os_alloc_aligned(size_t size, size_t alignment, bool commit, bool allow_large, mi_memid_t* memid);
 void*       _mi_os_alloc_aligned_at_offset(size_t size, size_t alignment, size_t align_offset, bool commit, bool allow_large, mi_memid_t* memid);
@@ -217,6 +217,7 @@ void        _mi_deferred_free(mi_heap_t* heap, bool force);
 void        _mi_page_free_collect(mi_page_t* page,bool force);
 void        _mi_page_reclaim(mi_heap_t* heap, mi_page_t* page);   // callback from segments
 
+size_t      _mi_page_bin(const mi_page_t* page); // for stats
 size_t      _mi_bin_size(size_t bin);            // for stats
 size_t      _mi_bin(size_t size);                // for stats
 
@@ -233,6 +234,7 @@ bool        _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* pa
 
 // "stats.c"
 void        _mi_stats_done(mi_stats_t* stats);
+void        _mi_stats_merge_thread(mi_tld_t* tld);
 mi_msecs_t  _mi_clock_now(void);
 mi_msecs_t  _mi_clock_end(mi_msecs_t start);
 mi_msecs_t  _mi_clock_start(void);
@@ -782,8 +784,10 @@ static inline mi_memid_t _mi_memid_none(void) {
   return _mi_memid_create(MI_MEM_NONE);
 }
 
-static inline mi_memid_t _mi_memid_create_os(bool committed, bool is_zero, bool is_large) {
+static inline mi_memid_t _mi_memid_create_os(void* base, size_t size, bool committed, bool is_zero, bool is_large) {
   mi_memid_t memid = _mi_memid_create(MI_MEM_OS);
+  memid.mem.os.base = base;
+  memid.mem.os.size = size;
   memid.initially_committed = committed;
   memid.initially_zero = is_zero;
   memid.is_pinned = is_large;
