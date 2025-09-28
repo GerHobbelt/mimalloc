@@ -63,7 +63,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #define mi_decl_noinline
 #define mi_decl_thread          __thread        // hope for the best :-)
 #define mi_decl_align(a)
-#define mi_decl_noreturn        
+#define mi_decl_noreturn
 #define mi_decl_weak
 #define mi_decl_hidden
 #define mi_decl_cold
@@ -135,8 +135,8 @@ static inline uintptr_t _mi_random_shuffle(uintptr_t x);
 // init.c
 extern mi_decl_hidden mi_decl_cache_align mi_stats_t       _mi_stats_main;
 extern mi_decl_hidden mi_decl_cache_align const mi_page_t  _mi_page_empty;
-void        _mi_process_load(void);
-void mi_cdecl _mi_process_done(void);
+void        _mi_auto_process_init(void);
+void mi_cdecl _mi_auto_process_done(void) mi_attr_noexcept;
 bool        _mi_is_redirected(void);
 bool        _mi_allocator_init(const char** message);
 void        _mi_allocator_done(void);
@@ -154,6 +154,7 @@ void        _mi_heap_guarded_init(mi_heap_t* heap);
 // os.c
 void        _mi_os_init(void);                                            // called from process init
 void*       _mi_os_alloc(size_t size, mi_memid_t* memid);
+void*       _mi_os_zalloc(size_t size, mi_memid_t* memid);
 void        _mi_os_free(void* p, size_t size, mi_memid_t memid);
 void        _mi_os_free_ex(void* p, size_t size, bool still_committed, mi_memid_t memid);
 
