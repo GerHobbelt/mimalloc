@@ -301,7 +301,7 @@ static void* mi_os_prim_alloc_aligned(size_t size, size_t alignment, bool commit
       // explicitly commit only the aligned part
       if (commit) {
         if (!_mi_os_commit(p, size, NULL)) {
-          mi_os_prim_free(p, over_size, 0);
+          mi_os_prim_free(*base, over_size, 0);
           return NULL;
         }
       }
@@ -511,6 +511,17 @@ bool _mi_os_reset(void* addr, size_t size) {
   return (err == 0);
 }
 
+
+void _mi_os_reuse( void* addr, size_t size ) {
+  // page align conservatively within the range
+  size_t csize = 0;
+  void* const start = mi_os_page_align_area_conservative(addr, size, &csize);
+  if (csize == 0) return;
+  const int err = _mi_prim_reuse(start, csize);
+  if (err != 0) {
+    _mi_warning_message("cannot reuse OS memory (error: %d (0x%x), address: %p, size: 0x%zx bytes)\n", err, err, start, csize);
+  }
+}
 
 // either resets or decommits memory, returns true if the memory needs
 // to be recommitted if it is to be re-used later on.
