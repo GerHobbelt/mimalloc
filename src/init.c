@@ -136,7 +136,7 @@ static mi_decl_cache_align mi_tld_t tld_main = {
     0, 0, 0, 0, 0, &mi_subproc_default,
     &tld_main.stats
   }, // segments
-  { MI_STAT_VERSION, MI_STATS_NULL }       // stats
+  { sizeof(mi_stats_t), MI_STAT_VERSION, MI_STATS_NULL }       // stats
 };
 
 mi_decl_cache_align mi_heap_t _mi_heap_main = {
@@ -162,7 +162,7 @@ mi_decl_cache_align mi_heap_t _mi_heap_main = {
 
 bool _mi_process_is_initialized = false;  // set to `true` in `mi_process_init`.
 
-mi_stats_t _mi_stats_main = { MI_STAT_VERSION, MI_STATS_NULL };
+mi_stats_t _mi_stats_main = { sizeof(mi_stats_t), MI_STAT_VERSION, MI_STATS_NULL };
 
 #if MI_GUARDED
 mi_decl_export void mi_heap_guarded_set_sample_rate(mi_heap_t* heap, size_t sample_rate, size_t seed) {
