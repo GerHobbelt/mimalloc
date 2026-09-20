@@ -133,6 +133,8 @@ mi_decl_nodiscard mi_decl_export void* mi_reallocf(void* p, size_t newsize)     
 mi_decl_nodiscard mi_decl_export size_t mi_usable_size(const void* p) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export size_t mi_good_size(size_t size)     mi_attr_noexcept;
 
+// for compat with v3.
+mi_decl_export void mi_free_small(void* p) mi_attr_noexcept;
 
 // ------------------------------------------------------
 // Internals
@@ -220,6 +222,7 @@ mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_zalloc(mi_heap_t
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_calloc(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2, 3);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_mallocn(mi_heap_t* heap, size_t count, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size2(2, 3);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_malloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
+mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_zalloc_small(mi_heap_t* heap, size_t size) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
 
 mi_decl_nodiscard mi_decl_export void* mi_heap_realloc(mi_heap_t* heap, void* p, size_t newsize)              mi_attr_noexcept mi_attr_alloc_size(3);
 mi_decl_nodiscard mi_decl_export void* mi_heap_reallocn(mi_heap_t* heap, void* p, size_t count, size_t size)  mi_attr_noexcept mi_attr_alloc_size2(3,4);
@@ -360,6 +363,23 @@ mi_decl_export void mi_collect_reduce(size_t target_thread_owned) mi_attr_noexce
 #define mi_heap_mallocn_tp(hp,tp,n)     ((tp*)mi_heap_mallocn(hp,n,sizeof(tp)))
 #define mi_heap_reallocn_tp(hp,p,tp,n)  ((tp*)mi_heap_reallocn(hp,p,n,sizeof(tp)))
 #define mi_heap_recalloc_tp(hp,p,tp,n)  ((tp*)mi_heap_recalloc(hp,p,n,sizeof(tp)))
+
+
+// ------------------------------------------------------
+// Compatibility with v3
+// ------------------------------------------------------
+
+typedef mi_heap_t  mi_theap_t;
+
+#define mi_theap_get_default()            mi_heap_get_default()      
+#define mi_theap_set_default(hp)          mi_heap_set_default(hp)      
+#define mi_theap_collect(hp,force)        mi_heap_collect(hp,force)
+#define mi_theap_malloc(hp,sz)            mi_heap_malloc(hp,sz)
+#define mi_theap_zalloc(hp,sz)            mi_heap_zalloc(hp,sz)
+#define mi_theap_calloc(hp,cnt,sz)        mi_heap_malloc(hp,cnt,sz)
+#define mi_theap_malloc_small(hp,sz)      mi_heap_malloc_small(hp,sz)
+#define mi_theap_malloc_aligned(hp,sz,a)  mi_heap_malloc_aligned(hp,sz,a)
+#define mi_theap_realloc(hp,p,newsz)      mi_heap_realloc(hp,p,newsz)
 
 
 // ------------------------------------------------------
