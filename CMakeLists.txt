@@ -11,7 +11,10 @@ option(MI_OVERRIDE          "Override the standard malloc interface (i.e. define
 option(MI_XMALLOC           "Enable abort() call on memory allocation failure by default" OFF)
 option(MI_SHOW_ERRORS       "Show error and warning messages by default (only enabled by default in DEBUG mode)" OFF)
 option(MI_GUARDED           "Build with guard pages behind certain object allocations (enabled by default in a debug build)" OFF)
-option(MI_USE_CXX           "Use the C++ compiler to compile the library (instead of the C compiler)" OFF)
+
+set(MI_USE_CXX "DEFAULT" CACHE STRING "Use the C++ compiler to compile the library (instead of the C compiler)")
+set_property(CACHE MI_USE_CXX PROPERTY STRINGS "OFF" "ON" "DEFAULT")
+
 option(MI_OPT_ARCH          "Only for optimized builds: turn on architecture specific optimizations (for arm64: '-march=armv8.1-a' (2016))" OFF)
 option(MI_SEE_ASM           "Generate assembly files" OFF)
 option(MI_OSX_INTERPOSE     "Use interpose to override standard malloc on macOS" ON)
@@ -185,9 +188,13 @@ if(CMAKE_C_COMPILER_ID MATCHES "Intel")
     list(APPEND mi_cflags -Wall)
 endif()
 
-# force C++ compilation with msvc or clang-cl to use modern C++ atomics
-if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel" OR MI_CLANG_CL)
-  set(MI_USE_CXX "ON")
+if(MI_USE_CXX STREQUAL "DEFAULT")
+  if(CMAKE_C_COMPILER_ID MATCHES "MSVC|Intel" OR MI_CLANG_CL)
+    # force C++ compilation with msvc or clang-cl to use modern C++ atomics
+    set(MI_USE_CXX "ON")
+  else()
+    set(MI_USE_CXX "OFF")
+  endif()
 endif()
 
 if(MI_OVERRIDE)
@@ -391,6 +398,8 @@ if(MI_USE_CXX)
   endif()
   if(CMAKE_CXX_COMPILER_ID MATCHES "Intel" AND NOT CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM")
     list(APPEND mi_cflags -Kc++)
+  elseif(MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
+    list(APPEND mi_cflags /Zc:__cplusplus)
   endif()
 endif()
 
@@ -404,6 +413,12 @@ endif()
 if(MI_LIBC_MUSL)
   message(STATUS "Assume using musl libc (MI_LIBC_MUSL=ON)")
   list(APPEND mi_defines MI_LIBC_MUSL=1)
+endif()
+
+if("$ENV{MSYSTEM}" STREQUAL "UCRT64")
+  message(STATUS "Detected MSYS2 UCRT64 environment")
+  set(MI_MINGW_UCRT64 "ON")
+  list(APPEND mi_defines MI_MINGW_UCRT64=1)
 endif()
 
 if(MI_WIN_USE_FIXED_TLS)
@@ -488,7 +503,6 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU|Intel" AND NOT CMAKE_SYSTEM
 endif()
 
 if (MSVC AND MSVC_VERSION GREATER_EQUAL 1914)
-  list(APPEND mi_cflags /Zc:__cplusplus)
   if(MI_OPT_ARCH AND NOT MI_CLANG_CL)
     if(MI_ARCH STREQUAL "arm64")
       set(MI_OPT_ARCH_FLAGS "/arch:armv8.1")           # fast atomics (LSE)
@@ -580,6 +594,12 @@ if(CMAKE_BUILD_TYPE_LC MATCHES "^(release|relwithdebinfo|minsizerel|none)$")
 else()
   set(mi_libname "${mi_libname}-${CMAKE_BUILD_TYPE_LC}") #append build type (e.g. -debug) if not a release version
 endif()
+string(REGEX REPLACE "^mimalloc[-]?" "" mi_libsuffix "${mi_libname}")
+
+set(mi_libname "mimalloc")
+if(NOT mi_libsuffix STREQUAL "")
+set(mi_libname "${mi_libname}-${mi_libsuffix}")
+endif()
 
 if(MI_BUILD_SHARED)
   list(APPEND mi_build_targets "shared")
@@ -643,16 +663,20 @@ if(MI_BUILD_SHARED)
     # On windows, link and copy the mimalloc redirection dll too.
     if(CMAKE_GENERATOR_PLATFORM STREQUAL "arm64ec")
       set(MIMALLOC_REDIRECT_SUFFIX "-arm64ec")
+      set(MINJECT_SUFFIX "")
     elseif(MI_ARCH STREQUAL "x64")
       set(MIMALLOC_REDIRECT_SUFFIX "")
+      set(MINJECT_SUFFIX "")
       if(CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64")
         message(STATUS "Note: x64 code emulated on Windows for arm64 should use an arm64ec build of 'mimalloc.dll'")
         message(STATUS "      together with 'mimalloc-redirect-arm64ec.dll'. See the 'bin\\readme.md' for more information.")
       endif()
     elseif(MI_ARCH STREQUAL "x86")
       set(MIMALLOC_REDIRECT_SUFFIX "32")
+      set(MINJECT_SUFFIX "32")
     else()
       set(MIMALLOC_REDIRECT_SUFFIX "-${MI_ARCH}")  # -arm64 etc.
+      set(MINJECT_SUFFIX "-${MI_ARCH}")
     endif()
 
     target_link_libraries(mimalloc PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bin/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.lib)  # the DLL import library
@@ -774,6 +798,11 @@ if (MI_BUILD_TESTS)
     if(WIN32)
       target_compile_definitions(mimalloc-test-stress-dynamic PRIVATE "MI_LINK_VERSION=1")  # link mi_version
       target_link_libraries(mimalloc-test-stress-dynamic PRIVATE mimalloc ${mi_libraries})  # link mi_version
+      if(MI_MINGW_UCRT64)
+        # mingw always links mimalloc after system libraries.
+        # post-process with `minject` to make sure mimalloc is the first dll in the load order.
+        add_custom_command(TARGET mimalloc-test-stress-dynamic POST_BUILD COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/bin/minject${MINJECT_SUFFIX} --postfix=${mi_libsuffix} -f -i $<TARGET_FILE:mimalloc-test-stress-dynamic>)
+      endif()
       add_test(NAME test-stress-dynamic COMMAND ${CMAKE_COMMAND} -E env MIMALLOC_VERBOSE=1 $<TARGET_FILE:mimalloc-test-stress-dynamic>)
     else()
       target_link_libraries(mimalloc-test-stress-dynamic PRIVATE ${mi_libraries}) # pthreads, issue 1158

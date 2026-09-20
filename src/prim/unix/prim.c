@@ -231,7 +231,7 @@ int _mi_prim_free(void* addr, size_t size ) {
 
 // return errno on failure
 static int unix_madvise(void* addr, size_t size, int advice) {
-  #if defined(__sun)
+  #if defined(__sun) || defined(_AIX)
   const int res = madvise((caddr_t)addr, size, advice);  // Solaris needs cast (issue #520)
   return (res==0 ? 0 : errno);
   #elif defined(__QNX__)
@@ -609,18 +609,16 @@ size_t _mi_prim_numa_node(void) {
 
 size_t _mi_prim_numa_node_count(void) {
   char buf[128];
-  unsigned node = 0;
-  size_t skipped = 0;
-  for(node = 0; node < 256; node++) {
+  unsigned last_found = 0;
+  for(unsigned node = 1; node < 256; node++) {
     // enumerate node entries -- todo: it there a more efficient way to do this? (but ensure there is no allocation)
-    _mi_snprintf(buf, 127, "/sys/devices/system/node/node%u", node + 1);
+    _mi_snprintf(buf, 127, "/sys/devices/system/node/node%u", node);
     if (mi_prim_access(buf,R_OK) != 0) {
-      skipped++;
-      if (skipped > 4) break; // allow some sparseness of nodes but not more than 4
+      if (node - last_found > 4) break; // allow some sparseness of nodes but not more than 4
     }
-    else { skipped = 0; }     // reset skipped count
+    else { last_found = node; }         // highest found node
   }
-  return (node+1);
+  return last_found + 1;
 }
 
 #elif defined(__FreeBSD__) && __FreeBSD_version >= 1200000
