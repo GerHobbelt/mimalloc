@@ -8,7 +8,7 @@ terms of the MIT license. A copy of the license can be found in the file
 #ifndef MIMALLOC_H
 #define MIMALLOC_H
 
-#define MI_MALLOC_VERSION 197   // major + 2 digits minor
+#define MI_MALLOC_VERSION 10908   // major + 2 digits minor + 2 digits patch
 
 // ------------------------------------------------------
 // Compiler specific attributes
@@ -114,7 +114,7 @@ mi_decl_export void* mi_expand(void* p, size_t newsize)                         
 mi_decl_export void mi_free(void* p) mi_attr_noexcept;
 mi_decl_nodiscard mi_decl_export mi_decl_restrict char* mi_strdup(const char* s) mi_attr_noexcept mi_attr_malloc;
 mi_decl_nodiscard mi_decl_export mi_decl_restrict char* mi_strndup(const char* s, size_t n) mi_attr_noexcept mi_attr_malloc;
-mi_decl_nodiscard mi_decl_export mi_decl_restrict char* mi_realpath(const char* fname, char* resolved_name) mi_attr_noexcept mi_attr_malloc;
+mi_decl_nodiscard mi_decl_export mi_decl_restrict char* mi_realpath(const char* fname, char* resolved_name) mi_attr_noexcept;
 
 // ------------------------------------------------------
 // Extended functionality
@@ -230,7 +230,7 @@ mi_decl_nodiscard mi_decl_export void* mi_heap_reallocf(mi_heap_t* heap, void* p
 
 mi_decl_nodiscard mi_decl_export mi_decl_restrict char* mi_heap_strdup(mi_heap_t* heap, const char* s)            mi_attr_noexcept mi_attr_malloc;
 mi_decl_nodiscard mi_decl_export mi_decl_restrict char* mi_heap_strndup(mi_heap_t* heap, const char* s, size_t n) mi_attr_noexcept mi_attr_malloc;
-mi_decl_nodiscard mi_decl_export mi_decl_restrict char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept mi_attr_malloc;
+mi_decl_nodiscard mi_decl_export mi_decl_restrict char* mi_heap_realpath(mi_heap_t* heap, const char* fname, char* resolved_name) mi_attr_noexcept;
 
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_malloc_aligned(mi_heap_t* heap, size_t size, size_t alignment) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2) mi_attr_alloc_align(3);
 mi_decl_nodiscard mi_decl_export mi_decl_restrict void* mi_heap_malloc_aligned_at(mi_heap_t* heap, size_t size, size_t alignment, size_t offset) mi_attr_noexcept mi_attr_malloc mi_attr_alloc_size(2);
@@ -339,6 +339,9 @@ mi_decl_export void mi_thread_set_in_threadpool(void) mi_attr_noexcept;
 // to reclaim abandoned memory (with a compatible heap_tag and arena_id) but in that case `mi_heap_destroy` will
 // fall back to `mi_heap_delete`.
 mi_decl_nodiscard mi_decl_export mi_heap_t* mi_heap_new_ex(int heap_tag, bool allow_destroy, mi_arena_id_t arena_id);
+
+// Experimental and unsafe: assumes the page of `p` is only accessed by the calling thread
+mi_decl_nodiscard mi_decl_export bool mi_unsafe_heap_page_is_under_utilized(mi_heap_t* heap, void* p, size_t perc_threshold) mi_attr_noexcept;
 
 // deprecated
 mi_decl_export int mi_reserve_huge_os_pages(size_t pages, double max_secs, size_t* pages_reserved) mi_attr_noexcept;

@@ -204,9 +204,9 @@ void _mi_options_init(void) {
 void mi_options_print(void) mi_attr_noexcept
 {
   // show version
-  const int vermajor = MI_MALLOC_VERSION/100;
-  const int verminor = (MI_MALLOC_VERSION%100)/10;
-  const int verpatch = (MI_MALLOC_VERSION%10);
+  const int vermajor = MI_MALLOC_VERSION/10000;
+  const int verminor = (MI_MALLOC_VERSION%10000)/100;
+  const int verpatch = (MI_MALLOC_VERSION%100);
   _mi_message("v%i.%i.%i%s%s (built on %s, %s)\n", vermajor, verminor, verpatch,
       #if defined(MI_CMAKE_BUILD_TYPE)
       ", " mi_stringify(MI_CMAKE_BUILD_TYPE)
@@ -620,11 +620,11 @@ static void mi_option_init(mi_option_desc_t* desc) {
       buf[i] = _mi_toupper(s[i]);
     }
     buf[len] = 0;
-    if (buf[0] == 0 || strstr("1;TRUE;YES;ON", buf) != NULL) {
+    if (buf[0] == 0 || _mi_streq(buf,"1") || _mi_streq(buf,"TRUE") || _mi_streq(buf,"YES") || _mi_streq(buf,"ON")) {
       desc->value = 1;
       desc->init = INITIALIZED;
     }
-    else if (strstr("0;FALSE;NO;OFF", buf) != NULL) {
+    else if (_mi_streq(buf,"0") || _mi_streq(buf,"FALSE") || _mi_streq(buf,"NO") || _mi_streq(buf,"OFF")) {      
       desc->value = 0;
       desc->init = INITIALIZED;
     }
