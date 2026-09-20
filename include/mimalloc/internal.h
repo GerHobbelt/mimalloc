@@ -105,8 +105,8 @@ int         _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list ar
 int         _mi_snprintf(char* buf, size_t buflen, const char* fmt, ...);
 char        _mi_toupper(char c);
 int         _mi_strnicmp(const char* s, const char* t, size_t n);
-void        _mi_strlcpy(char* dest, const char* src, size_t dest_size);
-void        _mi_strlcat(char* dest, const char* src, size_t dest_size);
+bool        _mi_strlcpy(char* dest, const char* src, size_t dest_size);  // returns true if the full string was copied
+bool        _mi_strlcat(char* dest, const char* src, size_t dest_size);  // returns true if the full string was catenated
 size_t      _mi_strlen(const char* s);
 size_t      _mi_strnlen(const char* s, size_t max_len);
 bool        _mi_streq(const char* s, const char* t);
@@ -375,6 +375,11 @@ mi_decl_noreturn mi_decl_cold void _mi_assert_fail(const char* assertion, const 
 // Is `x` a power of two? (0 is considered a power of two)
 static inline bool _mi_is_power_of_two(uintptr_t x) {
   return ((x & (x - 1)) == 0);
+}
+
+// valid alignment values are as posix memalign: <https://en.cppreference.com/c/memory/aligned_alloc#Notes>
+static inline bool mi_alignment_is_valid(size_t alignment) {
+  return ((alignment!=0) && _mi_is_power_of_two(alignment)); 
 }
 
 // Is a pointer aligned?
@@ -707,7 +712,7 @@ static inline bool mi_heap_malloc_use_guarded(mi_heap_t* heap, size_t size) {
   }
 }
 
-mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero) mi_attr_noexcept;
+mi_decl_restrict void* _mi_heap_malloc_guarded(mi_heap_t* heap, size_t size, bool zero, size_t* usable) mi_attr_noexcept;
 
 #endif
 

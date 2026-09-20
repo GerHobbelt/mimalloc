@@ -39,8 +39,8 @@ bool _mi_streq(const char* s, const char* t) {
   return (*s == *t);
 }
 
-void _mi_strlcpy(char* dest, const char* src, size_t dest_size) {
-  if (dest==NULL || src==NULL || dest_size == 0) return;
+bool _mi_strlcpy(char* dest, const char* src, size_t dest_size) {
+  if (dest==NULL || src==NULL || dest_size == 0) return (src==NULL || *src==0);
   // copy until end of src, or when dest is (almost) full
   while (*src != 0 && dest_size > 1) {
     *dest++ = *src++;
@@ -48,17 +48,18 @@ void _mi_strlcpy(char* dest, const char* src, size_t dest_size) {
   }
   // always zero terminate
   *dest = 0;
+  return (*src == 0);
 }
 
-void _mi_strlcat(char* dest, const char* src, size_t dest_size) {
-  if (dest==NULL || src==NULL || dest_size == 0) return;
+bool _mi_strlcat(char* dest, const char* src, size_t dest_size) {
+  if (dest==NULL || src==NULL || dest_size == 0) return (src==NULL || *src==0);
   // find end of string in the dest buffer
   while (*dest != 0 && dest_size > 1) {
     dest++;
     dest_size--;
   }
   // and catenate
-  _mi_strlcpy(dest, src, dest_size);
+  return _mi_strlcpy(dest, src, dest_size);
 }
 
 size_t _mi_strnlen(const char* s, size_t max_len) {
@@ -81,7 +82,7 @@ int _mi_getenv(const char* name, char* result, size_t result_size) {
 }
 #else
 int _mi_getenv(const char* name, char* result, size_t result_size) {
-  if (name==NULL || result == NULL || result_size < 64) return false;
+  if (name==NULL || result == NULL || result_size < 64) return ENOENT;
   // change the result of _mi_prim_getenv to an errno result
   const int res = _mi_prim_getenv(name,result,result_size);
   return (res > 0 ? 0 : (res == 0 ? ENOENT : EAGAIN));
@@ -234,7 +235,10 @@ int _mi_vsnprintf(char* buf, size_t bufsize, const char* fmt, va_list args) {
       if (c >= '1' && c <= '9') {
         width = (c - '0'); MI_NEXTC();
         while (c >= '0' && c <= '9') {
-          width = (10 * width) + (c - '0'); MI_NEXTC();
+          if (width < SIZE_MAX/1024) {  // no overflow
+            width = (10 * width) + (c - '0');
+          }
+          MI_NEXTC();
         }
         if (c == 0) break;  // extra check due to while
       }
