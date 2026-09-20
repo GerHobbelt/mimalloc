@@ -38,6 +38,7 @@ we therefore test the API over various inputs. Please add more tests :-)
 
 #include "testhelper.h"
 
+
 // ---------------------------------------------------------------------------
 // Test functions
 // ---------------------------------------------------------------------------
@@ -51,12 +52,17 @@ bool test_stl_heap_allocator2(void);
 bool test_stl_heap_allocator3(void);
 bool test_stl_heap_allocator4(void);
 
-bool mem_is_zero(uint8_t* p, size_t size) {
+static bool test_zero_aligned_first(void);
+
+bool mem_has_vals(uint8_t* p, size_t size, uint8_t val) {
   if (p==NULL) return false;
   for (size_t i = 0; i < size; ++i) {
-    if (p[i] != 0) return false;
+    if (p[i] != val) return false;
   }
   return true;
+}
+bool mem_is_zero(uint8_t* p, size_t size) {
+  return mem_has_vals(p,size,0);
 }
 
 // ---------------------------------------------------------------------------
@@ -332,6 +338,20 @@ int main(void) {
     mi_free(p);
   };
 
+  CHECK_BODY("rezalloc_aligned_zeros") {  // issue #763
+    size_t alignment = 1024;
+    size_t n = 1024 * 6;
+    void* ptr = mi_zalloc_aligned(n, alignment);
+    assert(mem_is_zero(ptr,n));
+    memset(ptr,123,n/2);
+    
+    ptr = mi_rezalloc_aligned(ptr, n/2, alignment);
+    assert(mem_has_vals(ptr,n/2,123));
+    
+    ptr = mi_rezalloc_aligned(ptr, n, alignment);
+    assert(mem_has_vals(ptr,n/2,123));
+    result = mem_is_zero((uint8_t*)ptr + n/2, n/2);    
+  }
   // ---------------------------------------------------
   // Reallocation
   // ---------------------------------------------------
@@ -385,6 +405,14 @@ int main(void) {
   CHECK("heap_destroy", test_heap1());
   CHECK("heap_delete", test_heap2());
 
+  
+  // ---------------------------------------------------
+  // Threads
+  // ---------------------------------------------------
+  CHECK_BODY("zero_aligned_first") {
+    result = mi_run_on_thread(&test_zero_aligned_first);
+  }
+  
   //mi_stats_print(NULL);
 
   // ---------------------------------------------------
@@ -517,3 +545,21 @@ bool test_stl_heap_allocator4(void) {
   return true;
 #endif
 }
+
+
+// ---------------------------------------------------------------------------
+// Test a zero size aligned allocation as the very first allocation of a fresh thread.
+// ---------------------------------------------------------------------------
+
+static bool test_zero_aligned_first(void) {
+  void* p = mi_malloc_aligned(0, 16);     // must be the first mimalloc call on this thread
+  bool res = (p != NULL && (uintptr_t)(p) % 16 == 0);
+  mi_free(p);
+  p = mi_zalloc_aligned(0, 32);
+  res = res && (p != NULL && (uintptr_t)(p) % 32 == 0);
+  mi_free(p);
+  return res;
+}
+
+
+
