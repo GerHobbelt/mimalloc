@@ -120,7 +120,9 @@ mi_decl_cache_align const mi_heap_t _mi_heap_empty = {
 
 
 mi_threadid_t _mi_thread_id(void) mi_attr_noexcept {
-  return _mi_prim_thread_id();
+  mi_threadid_t tid = _mi_prim_thread_id();
+  mi_assert_internal( (tid & 0x03) == 0 ); // mimalloc reserves the bottom 2 bits
+  return tid;
 }
 
 // the thread-local default heap for allocation
@@ -649,8 +651,9 @@ void mi_process_init(void) mi_attr_noexcept {
   }
 }
 
-// Called when the process is done (cdecl as it is used with `at_exit` on some platforms)
-void mi_cdecl mi_process_done(void) mi_attr_noexcept {
+
+// Called when the process is done 
+static void mi_process_done_once(void) {
   // only shutdown if we were initialized
   if (!_mi_process_is_initialized) return;
   // ensure we are called once
@@ -676,7 +679,7 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   #endif
 
   // done with tracking tools
-  mi_track_done()
+  mi_track_done();
 
   // Forcefully release all retained memory; this can be dangerous in general if overriding regular malloc/free
   // since after process_done there might still be other code running that calls `free` (like at_exit routines,
@@ -694,6 +697,14 @@ void mi_cdecl mi_process_done(void) mi_attr_noexcept {
   _mi_allocator_done();
   _mi_verbose_message("process done: 0x%zx\n", _mi_heap_main.thread_id);
   os_preloading = true; // don't call the C runtime anymore
+}
+
+
+// Called when the process is done (cdecl as it is used with `at_exit` on some platforms)
+void mi_cdecl mi_process_done(void) mi_attr_noexcept {
+  mi_atomic_do_once {
+    mi_process_done_once();
+  }
 }
 
 void mi_cdecl _mi_auto_process_done(void) mi_attr_noexcept {

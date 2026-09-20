@@ -149,7 +149,11 @@ static void mi_heap_collect_ex(mi_heap_t* heap, mi_collect_t collect)
 
   // free all current thread delayed blocks.
   // (if abandoning, after this there are no more thread-delayed references into the pages.)
-  _mi_heap_delayed_free_all(heap);
+  if (collect >= MI_ABANDON) {
+    _mi_heap_delayed_free_all(heap);      // free all
+  } else {
+    _mi_heap_delayed_free_partial(heap);  // best-effort; contended blocks are retried next time
+  }
 
   // collect retired pages
   _mi_heap_collect_retired(heap, force);
@@ -576,7 +580,8 @@ bool _mi_heap_area_visit_blocks(const mi_heap_area_t* area, mi_page_t* page, mi_
   mi_assert(page != NULL);
   if (page == NULL) return true;
 
-  _mi_page_free_collect(page,true);              // collect both thread_delayed and local_free
+  // collect early so the page used count is reported correctly
+  // _mi_page_free_collect(page,true);              // collect both thread_delayed and local_free
   mi_assert_internal(page->local_free == NULL);
   if (page->used == 0) return true;
 
@@ -687,9 +692,11 @@ typedef bool (mi_heap_area_visit_fun)(const mi_heap_t* heap, const mi_heap_area_
 static bool mi_heap_visit_areas_page(mi_heap_t* heap, mi_page_queue_t* pq, mi_page_t* page, void* vfun, void* arg) {
   MI_UNUSED(heap);
   MI_UNUSED(pq);
+  if (page==NULL) return true;
   mi_heap_area_visit_fun* fun = (mi_heap_area_visit_fun*)vfun;
   mi_heap_area_ex_t xarea;
-  xarea.page = page;
+  xarea.page = page;  
+  _mi_page_free_collect(page,true); // collect early so the page->used is accurate  
   _mi_heap_area_init(&xarea.area, page);
   return fun(heap, &xarea, arg);
 }
